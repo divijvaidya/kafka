@@ -54,7 +54,7 @@ public class StreamThreadStateStoreProvider {
             ((NamedTopologyStoreQueryParameters) storeQueryParams).topologyName() :
             null;
 
-        if (storeQueryParams.staleStoresEnabled() ? state.isAlive() : state == StreamThread.State.RUNNING) {
+        if (storeQueryParams.staleStoresEnabled() ? streamThread.isStateAlive() : state == StreamThread.State.RUNNING) {
             final Collection<Task> tasks = storeQueryParams.staleStoresEnabled() ?
                     streamThread.allTasks().values() : streamThread.activeTasks();
 
