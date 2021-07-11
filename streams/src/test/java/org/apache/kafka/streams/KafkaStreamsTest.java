@@ -345,8 +345,8 @@ public class KafkaStreamsTest {
                 Collections.emptySet()
         ));
         when(thread.waitOnThreadState(isA(StreamThread.State.class), anyLong())).thenReturn(true);
-        when(thread.getIsAlive()).thenReturn(true);
-        verify(thread, atMostOnce()).getIsAlive();
+        when(thread.isStateAlive()).thenReturn(true);
+        verify(thread, atMostOnce()).isStateAlive();
         when(thread.getName()).thenReturn("processId-StreamThread-" + threadId);
 
         doAnswer(invocation -> {
