@@ -90,8 +90,8 @@ public class Rate implements MeasurableStat {
          * ## Special case: First ever window
          * A special scenario occurs when rate calculation is performed before at least `config.samples` have completed
          * (e.g. if only 1 second has elapsed in a 30 second). In such a scenario, window duration would be equal to the
-         * time elapsed in the current window (since oldest non-obsolete window is current window). This leads to an
-         * incorrect value for rate. Consider the following example:
+         * time elapsed in the current window (since oldest non-obsolete window is current window). This leads to the
+         * following values for rate. Consider the following example:
          *      config.timeWindowMs() = 1s
          *      config.samples() = 2
          *      Record events (E) at timestamps:
@@ -101,16 +101,21 @@ public class Rate implements MeasurableStat {
          *      Rate calculated at T1 + 20ms = 1/0.02s = 50 events per second
          *      Rate calculated at T1 + 50ms = 2/0.05s = 40 events per second
          *      Rate calculated at T2 + 60ms = 3/0.06s = 50 events per second
-         * These incorrect/inflated rate calculations leads the system to provide artificially high rate than actual.
-         * The algorithm in this function has a special handling for such cases.
+         * When the Rate function in this class is used to calculate throttling, this approach doesn't handle the
+         * scenarios where an occasional burst of traffic will be acceptable and instead opts for ensuring a
+         * conservative approach of assuming higher values of rate. Note that {@link SimpleRate} uses this approach.
+         * But this function uses a different technique described later.
          *
          * ## Special case: First window after prolonged period of no record events
          * Another special scenario occurs when a record event is received after multiples of `config.timeWindowMs`
          * have elapsed since the last record event. In such a scenario, all the older samples would have been
-         * considered obsolete and would have been removed at the beginning of this function. Note that this scenario is
+         * considered obsolete and would have been purged at the beginning of this function. Note that this scenario is
          * different from Special Case of First ever window because unlike first ever window (where prior window is
-         * missing), this scenario genuinely has a prior window with zero events. The algorithm in this function has a
-         * special handling for such cases.
+         * missing), this scenario genuinely has a prior window with zero events.
+         *
+         * In both the above special cases, the algorithm in this function takes the same approach i.e. it assumes
+         * presence of prior windows with zero records. Hence, the duration of computation time window is determined by:
+         *          window duration = (now - start time of oldest non-obsolete window)
          *
          */
         long totalElapsedTimeMs = now - stat.oldest(now).getLastWindowMs();
@@ -118,14 +123,8 @@ public class Rate implements MeasurableStat {
         // Check how many full windows of data we have currently retained
         int numFullWindows = (int) (totalElapsedTimeMs / config.timeWindowMs());
 
-        // Special case: First ever window
-        // Detect this scenario by checking if the current sample belong to the first window AND the time at which
-        // we are calculating the rate belongs to first window.
-//        if (stat.isCurrentSampleInFirstWindow() && numFullWindows == 0) {
-//            return config.timeWindowMs();
-//        }
+        int minFullWindows = config.samples() - 1; // i.e. prior samples = required samples - current sample
 
-        int minFullWindows = config.samples() - 1;
         // ## Special case: First window after prolonged period of no record events
         // If the available windows are less than the minimum required, add the difference to the totalElapsedTime
         if (numFullWindows < minFullWindows) {

@@ -44,17 +44,33 @@ public abstract class SampledStat implements MeasurableStat {
         this.samples = new ArrayList<>(2);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * On every record, do the following:
+     * 1. Check if the current window has expired
+     * 2. If yes, then advance the current pointer to new window. The start time of the new window is set to either 1\
+     *    the time of the current event (ET) i.e. window starts with this event OR 2\ it's set to the end of last window.
+     *    If difference between time of current event and the end time of previous window is greater than length of a
+     *    window, then 1\ is used else 2\.
+     * 3. Update the recorded value for the current window
+     * 4. Increase the number of event count
+     */
     @Override
-    public void record(MetricConfig config, double value, long timeMs) {
-        Sample sample = current(timeMs);
-        if (sample.isComplete(timeMs, config)) {
-            long currentSampleStartTime = sample.lastWindowMs;
-            sample = advance(config, timeMs);
-            if (timeMs - currentSampleStartTime < (2 * config.timeWindowMs())) {
-                sample.setLastWindowMs(currentSampleStartTime + config.timeWindowMs());
-            }
+    public void record(MetricConfig config, double value, long recordingTimeMs) {
+        Sample sample = current(recordingTimeMs);
+        if (sample.isComplete(recordingTimeMs, config)) {
+            final long previousWindowStartTime = sample.getLastWindowMs();
+            sample = advance(config, recordingTimeMs);
+            final long previousWindowEndtime = previousWindowStartTime + config.timeWindowMs();
+//            if (recordingTimeMs - previousWindowEndtime > config.timeWindowMs()) {
+//                sample.setLastWindowMs(previousWindowEndtime);
+//            } else {
+//                sample.setLastWindowMs(recordingTimeMs);
+//            }
+            sample.setLastWindowMs(recordingTimeMs-((recordingTimeMs - previousWindowEndtime) % config.timeWindowMs()));
         }
-        update(sample, config, value, timeMs);
+        update(sample, config, value, recordingTimeMs);
         sample.setEventCount(sample.getEventCount() + 1);
     }
 
@@ -87,29 +103,16 @@ public abstract class SampledStat implements MeasurableStat {
         return this.samples.get(this.current);
     }
 
-    /**
-     * Determines if the latest sample belongs to the first ever window.
-     *
-     * This scenario is true iff all of the following are true:
-     * 1. There is only 1 sample available. Since each window produces one sample, presence of more than one sample
-     *    means that other windows have been processed, hence, current cannot be the first window.
-     * 2. The current sample is active i.e. it has not been reset.
-     * 3. The current sample has not been reused by another window.
-     */
-    public boolean isCurrentSampleInFirstWindow() {
-        return this.samples.size() == 1 && // should have exactly one sample
-                this.samples.get(0).isActive() && // sample should be active
-                !this.samples.get(0).isObjectReused(); // sample should never have been reused
-    }
-
     public Sample oldest(long now) {
         if (samples.size() == 0)
             this.samples.add(newSample(now));
         Sample oldest = this.samples.get(0);
         for (int i = 1; i < this.samples.size(); i++) {
             Sample curr = this.samples.get(i);
-            if (curr.getLastWindowMs() < oldest.getLastWindowMs())
+            if ((curr.getLastWindowMs() < oldest.getLastWindowMs()) &&
+                    Sample.LifecycleState.ACTIVE.equals(curr.currentLifecycleState)) { // only consider active samples
                 oldest = curr;
+            }
         }
         return oldest;
     }
@@ -141,11 +144,10 @@ public abstract class SampledStat implements MeasurableStat {
         private long eventCount;
         private long lastWindowMs;
         private double value;
-        private boolean isReused = false;
 
         /**
-         * A Sample object could be re-used to store future samples for space efficiency. Thus, a sample could be in
-         * either of the following lifecycle states:
+         * A Sample object could be re-used in a ring buffer to store future samples for space efficiency.
+         * Thus, a sample could be in either of the following lifecycle states:
          * NOT_INITIALIZED: Sample has not been initialized.
          * ACTIVE: Sample has values and is currently
          * RESET: Sample has been reset and the object is not destroyed so that it could be used for storing future
@@ -168,15 +170,7 @@ public abstract class SampledStat implements MeasurableStat {
             this.currentLifecycleState = LifecycleState.RESET;
             this.eventCount = 0;
             this.lastWindowMs = now;
-            this.isReused = true;
             this.value = initialValue;
-        }
-
-        /**
-         * Has this sample object ever been re-used
-         */
-        public boolean isObjectReused() {
-            return isReused;
         }
 
         public boolean isComplete(long timeMs, MetricConfig config) {
