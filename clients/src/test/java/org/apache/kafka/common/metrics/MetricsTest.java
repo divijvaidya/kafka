@@ -145,6 +145,7 @@ public class MetricsTest {
         // pretend 2 seconds passed...
         long sleepTimeMs = 2;
         time.sleep(sleepTimeMs * 1000);
+        elapsedSecs += sleepTimeMs;
 
         assertEquals(5.0, metricValueFunc.apply(metrics.metric(metrics.metricName("s2.total", "grp1"))), EPS,
             "s2 reflects the constant value");
@@ -154,9 +155,9 @@ public class MetricsTest {
             "Max(0...9) = 9");
         assertEquals(0.0, metricValueFunc.apply(metrics.metric(metrics.metricName("test.min", "grp1"))), EPS,
             "Min(0...9) = 0");
-        // rate is calculated over the first ever window. Hence, we don't assume presence of prior windows with 0 recorded events.
-        assertEquals((double) sum / (config.timeWindowMs() / 1000.0), metricValueFunc.apply(metrics.metric(metrics.metricName("test.rate", "grp1"))), EPS,
-            "Rate(0...9) = 1.5");
+        // rate is calculated over the first ever window. Hence, we assume presence of prior windows with 0 recorded events.
+        assertEquals((double) sum / elapsedSecs, metricValueFunc.apply(metrics.metric(metrics.metricName("test.rate", "grp1"))), EPS,
+            "Rate(0...9) = 1.40625");
         assertEquals(count / elapsedSecs, metricValueFunc.apply(metrics.metric(metrics.metricName("test.occurences", "grp1"))), EPS,
             String.format("Occurrences(0...%d) = %f", count, count / elapsedSecs));
         assertEquals(count, metricValueFunc.apply(metrics.metric(metrics.metricName("test.count", "grp1"))), EPS,
@@ -628,37 +629,6 @@ public class MetricsTest {
     }
 
     /**
-     * This test validates the "Special case: First ever window" defined in {@link Rate#windowSize(MetricConfig, long)}
-     */
-    @Test
-    public void testRateForFirstWindow() {
-        Rate rate = new Rate();
-
-        //Given
-        MetricConfig config = new MetricConfig().timeWindow(1, TimeUnit.SECONDS).samples(2);
-
-        //In the first window the rate is a fraction of the whole (1s) window
-        //So when we record 1000 at t0, the rate should be 1000 until the window completes, or more data is recorded.
-        record(rate, config, 1000);
-        assertEquals(1000, measure(rate, config), 0);
-        time.sleep(100);
-        assertEquals(1000, measure(rate, config), 0); // 1000B / 0.1s
-        time.sleep(100);
-        assertEquals(1000, measure(rate, config), 0); // 1000B / 0.2s
-        time.sleep(200);
-        assertEquals(1000, measure(rate, config), 0); // 1000B / 0.4s
-
-        //In the second (and subsequent) window(s), the rate will be in proportion to the elapsed time
-        //So the rate will degrade over time, as the time between measurement and the initial recording grows.
-        time.sleep(600);
-        assertEquals(1000, measure(rate, config), 0); // 1000B / 1.0s
-        time.sleep(200);
-        assertEquals(1000 / 1.2, measure(rate, config), 0); // 1000B / 1.2s
-        time.sleep(200);
-        assertEquals(1000 / 1.4, measure(rate, config), 0); // 1000B / 1.4s
-    }
-
-    /**
      * This test validates the "Special case: First window after prolonged period of no record events"
      * defined in {@link Rate#windowSize(MetricConfig, long)}
      */
@@ -670,15 +640,16 @@ public class MetricsTest {
         MetricConfig config = new MetricConfig().timeWindow(1, TimeUnit.SECONDS).samples(2);
 
         //In the first window the rate is a fraction of the whole (1s) window
-        //So when we record 1000 at t0, the rate should be 1000 until the window completes, or more data is recorded.
+        //So when we record 1000 at t0, the rate is calculated assuming presence of a prior window with 0 records.
         record(rate, config, 1000);
         assertEquals(1000, measure(rate, config), 0);
         time.sleep(100);
-        assertEquals(1000, measure(rate, config), 0); // 1000B
+        assertEquals(1000.0d / 1.1d, measure(rate, config), 0); // 1000B / 1.1s
         time.sleep(100);
-        assertEquals(1000, measure(rate, config), 0); // 1000B
+        assertEquals(1000.0d / 1.2d, measure(rate, config), 0); // 1000B / 1.2s
         time.sleep(200);
-        assertEquals(1000, measure(rate, config), 0); // 1000B
+        assertEquals(1000.0d / 1.4d, measure(rate, config), 0); // 1000B / 1.4s
+
         time.sleep(600);
         // Time elapsed = 1s. Start of window#2.
         // Window#2 has no record events but the rate will be in proportion to the elapsed time
@@ -688,9 +659,18 @@ public class MetricsTest {
         assertEquals(1000 / 1.2, measure(rate, config), 0); // 1000B / 1.2s
         time.sleep(200);
         assertEquals(1000 / 1.4, measure(rate, config), 0); // 1000B / 1.4s
-        time.sleep(600);
-        // Window#3 and Window#4 have no record events.
-        time.sleep(2000);
+        time.sleep(500);
+        record(rate, config, 1000);
+        time.sleep(100);
+        // End of Window#2
+        // Partial gap < quota window size
+        time.sleep(200);
+        record(rate, config, 1000);
+        // Even though the record arrived at 200ms after the window starting time, we would assume that window starts
+        // at where it should have started and not when the event arrives
+        assertEquals(2000 / 1.2, measure(rate, config), 0); // 1000B / 1.2s
+        // Window#4 have no record events.
+        time.sleep(1800);
         // Time elapsed = 4s. Start of Window#5
         // Rate is zero since no recorded events in the window duration used for calculation of rate
         assertEquals(0, measure(rate, config), 0);
@@ -754,11 +734,11 @@ public class MetricsTest {
         assertEquals(4000.0 / 9.0, measure(rate, config), 1); // 4000B / 9s
 
         //Going over the 10 window boundary should cause the first window's values (1000) will be purged.
-        //So the rate is calculated based on the oldest reading, which is inside the second window, at 1.4s
+        //So the rate is calculated based on the oldest reading, which is at the beginning of the second window, at 1s
         time.sleep(1500);
-        assertEquals((4000 - 1000) / (10.5 - 1.4), measure(rate, config), 1);
+        assertEquals((4000 - 1000) / (10.5 - 1.0), measure(rate, config), 1);
         record(rate, config, 1000);
-        assertEquals((5000 - 1000) / (10.5 - 1.4), measure(rate, config), 1);
+        assertEquals((5000 - 1000) / (10.5 - 1.0), measure(rate, config), 1);
     }
 
     private void record(Rate rate, MetricConfig config, int value) {
