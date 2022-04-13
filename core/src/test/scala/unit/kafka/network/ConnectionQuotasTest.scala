@@ -407,16 +407,38 @@ class ConnectionQuotasTest {
     addListenersAndVerify(config, listenerConfig, connectionQuotas)
 
     // create connections with the rate > listener quota on every listener
-    // run a bit longer (20 seconds) to also verify the throttle rate
-    val connectionsPerListener = 800 // should take 20 seconds to create 800 connections with rate = 40/sec
+    // run a bit longer to also verify the throttle rate
+    val connectionsPerListener = 600 // should take 20 seconds to create 600 connections with throttled rate = 30/sec
 
     // assert that connection creation rate on listener (per sec) is indeed greater than or equal to listener quota
     assertTrue(connCreateRatePerSec >= listenerRateLimit)
 
+    /*
+     * We are sending 600 requests at a rate of connCreateRatePerSec=40/s. If the throttling is working correctly,
+     * the system should enforce a rate of listenerRateLimit=30/s, thus taking an overall time of 20s to run.
+     *
+     * Rate limiting contract in Kafka is enforced over a calculation window which is calculated as
+     * quota.window.num * quota.window.size.seconds = 2 * 1 = 2s in this test. Rate limiting contract ensures that over
+     * a period of 20s, rate calculated at end of each calculation window (every 2s) should be equal to listenerRateLimit.
+     *
+     * However, due to sleeps and thread blocking, we cannot guarantee exact rate of 30/s, thus, we add an epsilon i.e.
+     * an acceptable error margin. The calculation of epsilon is based on worst case scenario.
+     * Worst case scenario occurs when the max throttling interval of 1s is not sufficient to bring the rate down to
+     * acceptable levels.
+     *
+     * 1. at end of 15 sec when all 600 requests have been submitted and are waiting to be accepted
+     * 2. during the 16th sec time window, at max 60 requests are picked up but the max wait is 1 sec which means, we
+     *    would still end up picking requests in 17th sec time window leading to > 30/s rate for those 2 time windows.
+     * 3. hence, in worst case all the input requests will be finished somewhere in the 18th or 19th sec window.
+     * Thus, in worst case, this would lead to a calculated rate of ~600/18 < 33.3
+     *
+     */
+
     val futures = listeners.values.map { listener =>
       executor.submit((() =>
         // epsilon is set to account for the worst-case where the measurement is taken just before or after the quota window
-        acceptConnectionsAndVerifyRate(connectionQuotas, listener, connectionsPerListener, connCreateIntervalMs, listenerRateLimit, 7)): Runnable)
+        acceptConnectionsAndVerifyRate(connectionQuotas, listener, connectionsPerListener, connCreateIntervalMs,
+          listenerRateLimit, 3.5)): Runnable)
     }
     futures.foreach(_.get(30, TimeUnit.SECONDS))
 
@@ -904,7 +926,7 @@ class ConnectionQuotasTest {
                                              numConnections: Long,
                                              timeIntervalMs: Long,
                                              expectedRate: Int,
-                                             epsilon: Int,
+                                             epsilon: Double,
                                              expectIpThrottle: Boolean = false) : Unit = {
     val startTimeMs = time.milliseconds
     val startNumConnections = connectionQuotas.get(listenerDesc.defaultIp)
@@ -913,8 +935,12 @@ class ConnectionQuotasTest {
     val elapsedSeconds = MetricsUtils.convert(time.milliseconds - startTimeMs, TimeUnit.SECONDS)
     val createdConnections = connectionQuotas.get(listenerDesc.defaultIp) - startNumConnections
     val actualRate = createdConnections.toDouble / elapsedSeconds
+    assertFalse(actualRate > (1000.0 / timeIntervalMs.toDouble),
+      s"Measured rate $actualRate cannot be larger than the rate at which test created the connections i.e. " +
+        s"${1000.0 / timeIntervalMs.toDouble}");
+
     assertEquals(expectedRate.toDouble, actualRate, epsilon,
-      s"Expected rate ($expectedRate +- $epsilon), but got $actualRate ($createdConnections connections / $elapsedSeconds sec)")
+      s"Expected rate (${expectedRate.toDouble} +- $epsilon), but got $actualRate ($createdConnections connections / $elapsedSeconds sec)")
   }
 
   /**

@@ -121,9 +121,9 @@ public class Rate implements MeasurableStat {
         // Special case: First ever window
         // Detect this scenario by checking if the current sample belong to the first window AND the time at which
         // we are calculating the rate belongs to first window.
-        if (stat.isCurrentSampleInFirstWindow() && numFullWindows == 0) {
-            return config.timeWindowMs();
-        }
+//        if (stat.isCurrentSampleInFirstWindow() && numFullWindows == 0) {
+//            return config.timeWindowMs();
+//        }
 
         int minFullWindows = config.samples() - 1;
         // ## Special case: First window after prolonged period of no record events

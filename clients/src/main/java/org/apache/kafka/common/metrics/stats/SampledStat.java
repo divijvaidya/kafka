@@ -47,8 +47,13 @@ public abstract class SampledStat implements MeasurableStat {
     @Override
     public void record(MetricConfig config, double value, long timeMs) {
         Sample sample = current(timeMs);
-        if (sample.isComplete(timeMs, config))
+        if (sample.isComplete(timeMs, config)) {
+            long currentSampleStartTime = sample.lastWindowMs;
             sample = advance(config, timeMs);
+            if (timeMs - currentSampleStartTime < (2 * config.timeWindowMs())) {
+                sample.setLastWindowMs(currentSampleStartTime + config.timeWindowMs());
+            }
+        }
         update(sample, config, value, timeMs);
         sample.setEventCount(sample.getEventCount() + 1);
     }
