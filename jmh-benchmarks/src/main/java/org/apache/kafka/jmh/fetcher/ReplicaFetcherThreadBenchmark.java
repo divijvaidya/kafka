@@ -72,6 +72,7 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
 import scala.Option;
+import scala.Tuple2;
 import scala.collection.Iterator;
 import scala.collection.JavaConverters;
 import scala.compat.java8.OptionConverters;
@@ -303,8 +304,8 @@ public class ReplicaFetcherThreadBenchmark {
         }
 
         @Override
-        public long fetchEarliestOffsetFromLeader(TopicPartition topicPartition, int currentLeaderEpoch) {
-            return 0;
+        public Option<OffsetAndEpoch> fetchEarliestOffsetFromLeader(TopicPartition topicPartition, int currentLeaderEpoch) {
+            return OptionConverters.toScala(Optional.of(new OffsetAndEpoch(0, 0)));
         }
 
         @Override

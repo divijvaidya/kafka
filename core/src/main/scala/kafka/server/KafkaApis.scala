@@ -132,9 +132,9 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   private def isRemoteStorageEnabledForTopic(topicPartition: TopicPartition): Boolean = {
-    val v1 = replicaManager.logManager.getLog(topicPartition) match {
+    replicaManager.logManager.getLog(topicPartition) match {
       case Some(topicLog) =>
-        return topicLog.remoteLogEnabled()
+        topicLog.remoteLogEnabled()
       case None =>
         throw new IllegalArgumentException(s"$topicPartition does not exist")
     }
