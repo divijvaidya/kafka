@@ -1968,7 +1968,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         unauthorizedTopicResponses += topicPartition -> new DeleteRecordsPartitionResult()
           .setLowWatermark(DeleteRecordsResponse.INVALID_LOW_WATERMARK)
           .setErrorCode(Errors.TOPIC_AUTHORIZATION_FAILED.code)
-      else if (!metadataCache.contains(topicPartition))
+      else if (!metadataCache.contains(topicPartition) || !replicaManager.logManager.getLog(topicPartition).isDefined)
         nonExistingTopicResponses += topicPartition -> new DeleteRecordsPartitionResult()
           .setLowWatermark(DeleteRecordsResponse.INVALID_LOW_WATERMARK)
           .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code)

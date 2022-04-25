@@ -609,6 +609,7 @@ final class DeleteRecordsAction(partition: TopicPartition, beforeOffset: Int, ex
     val recordsToDelete = Map(partition -> RecordsToDelete.beforeOffset(beforeOffset)).asJava
     try {
       context.admin().deleteRecords(recordsToDelete).all().get
+      expectedException.map(exp => fail("Expected exception: " + exp))
     } catch {
       case e: Throwable => {
         if(expectedException.isDefined) {
