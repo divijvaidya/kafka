@@ -100,9 +100,9 @@ public class TimestampedSegmentsTest {
         final TimestampedSegment segment1 = segments.getOrCreateSegmentIfLive(0, context, -1L);
         final TimestampedSegment segment2 = segments.getOrCreateSegmentIfLive(1, context, -1L);
         final TimestampedSegment segment3 = segments.getOrCreateSegmentIfLive(2, context, -1L);
-        assertTrue(new File(context.stateDir(), "test/test.0").isDirectory());
-        assertTrue(new File(context.stateDir(), "test/test." + SEGMENT_INTERVAL).isDirectory());
-        assertTrue(new File(context.stateDir(), "test/test." + 2 * SEGMENT_INTERVAL).isDirectory());
+        assertTrue(Files.isDirectory(context.stateDir().toPath().resolve("test/test.0")));
+        assertTrue(Files.isDirectory(context.stateDir().toPath().resolve("test/test." + SEGMENT_INTERVAL)));
+        assertTrue(Files.isDirectory(context.stateDir().toPath().resolve("test/test." + 2 * SEGMENT_INTERVAL)));
         assertTrue(segment1.isOpen());
         assertTrue(segment2.isOpen());
         assertTrue(segment3.isOpen());
@@ -112,7 +112,7 @@ public class TimestampedSegmentsTest {
     public void shouldNotCreateSegmentThatIsAlreadyExpired() {
         final long streamTime = updateStreamTimeAndCreateSegment(7);
         assertNull(segments.getOrCreateSegmentIfLive(0, context, streamTime));
-        assertFalse(new File(context.stateDir(), "test/test.0").exists());
+        assertTrue(Files.notExists(context.stateDir().toPath().resolve("test/test.0")));
     }
 
     @Test

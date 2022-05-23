@@ -26,7 +26,6 @@ import java.time.Duration
 import java.util
 import java.util.{Collections, Properties}
 import java.util.concurrent._
-
 import javax.management.ObjectName
 import com.yammer.metrics.core.MetricName
 import kafka.admin.ConfigCommand
@@ -64,6 +63,7 @@ import org.apache.kafka.test.{TestSslUtils, TestUtils => JTestUtils}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Disabled, Test, TestInfo}
 
+import java.nio.file.attribute.FileTime
 import scala.annotation.nowarn
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
@@ -384,7 +384,7 @@ class DynamicBrokerReconfigurationTest extends QuorumTestHarness with SaslSetup 
     // the broker, so we wait for producer operation to succeed to verify that the update has been performed.
     Files.copy(new File(sslProperties2.getProperty(SSL_KEYSTORE_LOCATION_CONFIG)).toPath,
       reusableFile.toPath, StandardCopyOption.REPLACE_EXISTING)
-    reusableFile.setLastModified(System.currentTimeMillis() + 1000)
+    Files.setLastModifiedTime(reusableFile.toPath, FileTime.fromMillis(System.currentTimeMillis() + 1000))
     alterSslKeystore(adminClient, reusableProps, SecureExternal)
     TestUtils.waitUntilTrue(() => {
       try {

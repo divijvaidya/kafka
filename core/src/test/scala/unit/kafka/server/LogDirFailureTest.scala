@@ -84,8 +84,8 @@ class LogDirFailureTest extends IntegrationTestHarness {
       val logDir = new File(kafkaConfig.logDirs.head)
       // Make log directory of the partition on the leader broker inaccessible by replacing it with a file
       CoreUtils.swallow(Utils.delete(logDir), this)
-      logDir.createNewFile()
-      assertTrue(logDir.isFile)
+      Files.createFile(logDir.toPath)
+      assertTrue(Files.isRegularFile(logDir.toPath))
 
       server = TestUtils.createServer(kafkaConfig)
       TestUtils.waitUntilTrue(() => statusCodeOption.contains(1), "timed out waiting for broker to halt")

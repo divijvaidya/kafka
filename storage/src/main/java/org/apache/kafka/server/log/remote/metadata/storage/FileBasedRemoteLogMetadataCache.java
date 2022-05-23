@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +41,7 @@ public class FileBasedRemoteLogMetadataCache extends RemoteLogMetadataCache {
 
     public FileBasedRemoteLogMetadataCache(TopicIdPartition topicIdPartition,
                                            Path partitionDir) {
-        if (!partitionDir.toFile().exists() || !partitionDir.toFile().isDirectory()) {
+        if (!Files.isDirectory(partitionDir)) {
             throw new KafkaException("Given partition directory:" + partitionDir + " must be an existing directory.");
         }
 

@@ -44,6 +44,7 @@ import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
+import java.nio.file.Files
 import java.util.Properties
 import scala.collection.Seq
 import scala.jdk.CollectionConverters._
@@ -113,8 +114,8 @@ class ServerShutdownTest extends KafkaServerTestHarness {
     shutdownBroker()
     for (logDir <- config.logDirs) {
       val OffsetCheckpointFile = new File(logDir, LogManager.RecoveryPointCheckpointFile)
-      assertTrue(OffsetCheckpointFile.exists)
-      assertTrue(OffsetCheckpointFile.length() > 0)
+      assertTrue(Files.exists(OffsetCheckpointFile.toPath))
+      assertTrue(Files.size(OffsetCheckpointFile.toPath) > 0)
     }
     producer.close()
 

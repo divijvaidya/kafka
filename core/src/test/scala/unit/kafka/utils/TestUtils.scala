@@ -1464,9 +1464,10 @@ object TestUtils extends Logging {
     // Make log directory of the partition on the leader broker inaccessible by replacing it with a file
     val localLog = leaderBroker.replicaManager.localLogOrException(partition)
     val logDir = localLog.dir.getParentFile
+    val logDirPath = logDir.toPath
     CoreUtils.swallow(Utils.delete(logDir), this)
-    logDir.createNewFile()
-    assertTrue(logDir.isFile)
+    Files.createFile(logDirPath)
+    assertTrue(Files.isRegularFile(logDirPath))
 
     if (failureType == Roll) {
       assertThrows(classOf[KafkaStorageException], () => leaderBroker.replicaManager.getLog(partition).get.roll())
@@ -1475,7 +1476,7 @@ object TestUtils extends Logging {
     }
 
     // Wait for ReplicaHighWatermarkCheckpoint to happen so that the log directory of the topic will be offline
-    waitUntilTrue(() => !leaderBroker.logManager.isLogDirOnline(logDir.getAbsolutePath), "Expected log directory offline", 3000L)
+    waitUntilTrue(() => !leaderBroker.logManager.isLogDirOnline(logDirPath.toAbsolutePath.toString), "Expected log directory offline", 3000L)
     assertTrue(leaderBroker.replicaManager.localLog(partition).isEmpty)
   }
 

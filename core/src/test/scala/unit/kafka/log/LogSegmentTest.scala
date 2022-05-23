@@ -17,7 +17,6 @@
 package kafka.log
 
 import java.io.File
-
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.{EpochEntry, LeaderEpochFileCache}
 import kafka.utils.TestUtils
@@ -28,6 +27,7 @@ import org.apache.kafka.common.utils.{MockTime, Time, Utils}
 import org.junit.jupiter.api.Assertions._
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
+import java.nio.file.Files
 import scala.collection._
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -510,11 +510,11 @@ class LogSegmentTest {
     checkEquals(ms2.records.iterator, read.records.records.iterator)
     val oldSize = seg.log.sizeInBytes()
     val oldPosition = seg.log.channel.position
-    val oldFileSize = seg.log.file.length
+    val oldFileSize = Files.size(seg.log.file.toPath)
     assertEquals(512*1024*1024, oldFileSize)
     seg.close()
     //After close, file should be trimmed
-    assertEquals(oldSize, seg.log.file.length)
+    assertEquals(oldSize, Files.size(seg.log.file.toPath))
 
     val segReopen = LogSegment.open(tempDir, baseOffset = 40, logConfig, Time.SYSTEM, fileAlreadyExists = true,
       initFileSize = 512 * 1024 * 1024, preallocate = true)
@@ -524,7 +524,7 @@ class LogSegmentTest {
     checkEquals(ms2.records.iterator, readAgain.records.records.iterator)
     val size = segReopen.log.sizeInBytes()
     val position = segReopen.log.channel.position
-    val fileSize = segReopen.log.file.length
+    val fileSize = Files.size(segReopen.log.file.toPath)
     assertEquals(oldPosition, position)
     assertEquals(oldSize, size)
     assertEquals(size, fileSize)

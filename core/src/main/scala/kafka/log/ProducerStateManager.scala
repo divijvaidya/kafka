@@ -458,7 +458,7 @@ object ProducerStateManager {
 
   // visible for testing
   private[log] def listSnapshotFiles(dir: File): Seq[SnapshotFile] = {
-    if (dir.exists && dir.isDirectory) {
+    if (Files.isDirectory(dir.toPath)) {
       Option(dir.listFiles).map { files =>
         files.filter(f => f.isFile && isSnapshotFile(f)).map(SnapshotFile(_)).toSeq
       }.getOrElse(Seq.empty)

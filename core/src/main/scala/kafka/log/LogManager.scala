@@ -160,7 +160,7 @@ class LogManager(logDirs: Seq[File],
             throw new IOException(s"Failed to create data directory ${dir.getAbsolutePath}")
           Utils.flushDir(dir.toPath.toAbsolutePath.normalize.getParent)
         }
-        if (!dir.isDirectory || !dir.canRead)
+        if (!Files.isDirectory(dir.toPath) || !Files.isReadable(dir.toPath))
           throw new IOException(s"${dir.getAbsolutePath} is not a readable log directory.")
 
         // getCanonicalPath() throws IOException if a file system query fails or if the path is invalid (e.g. contains
@@ -357,7 +357,7 @@ class LogManager(logDirs: Seq[File],
         }
 
         val logsToLoad = Option(dir.listFiles).getOrElse(Array.empty).filter(logDir =>
-          logDir.isDirectory && UnifiedLog.parseTopicPartitionName(logDir).topic != KafkaRaftServer.MetadataTopic)
+          Files.isDirectory(logDir.toPath) && UnifiedLog.parseTopicPartitionName(logDir).topic != KafkaRaftServer.MetadataTopic)
         val numLogsLoaded = new AtomicInteger(0)
         numTotalLogs += logsToLoad.length
 

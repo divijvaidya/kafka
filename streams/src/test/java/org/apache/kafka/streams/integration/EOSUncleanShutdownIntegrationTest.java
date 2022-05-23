@@ -44,6 +44,8 @@ import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Optional;
@@ -107,7 +109,7 @@ public class EOSUncleanShutdownIntegrationTest {
     private static final int RECORD_TOTAL = 3;
 
     @Test
-    public void shouldWorkWithUncleanShutdownWipeOutStateStore() throws InterruptedException {
+    public void shouldWorkWithUncleanShutdownWipeOutStateStore() throws InterruptedException, IOException {
         final String appId = "shouldWorkWithUncleanShutdownWipeOutStateStore";
         STREAMS_CONFIG.put(StreamsConfig.APPLICATION_ID_CONFIG, appId);
         STREAMS_CONFIG.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, eosConfig);
@@ -153,7 +155,7 @@ public class EOSUncleanShutdownIntegrationTest {
                 singletonList(new KeyValueTimestamp<>("k1", "v1", 0L)));
 
             // wait until the first request is processed and some files are created in it
-            TestUtils.waitForCondition(() -> taskStateDir.exists() && taskStateDir.isDirectory() && taskStateDir.list().length > 0,
+            TestUtils.waitForCondition(() -> Files.isDirectory(taskStateDir.toPath()) && taskStateDir.list().length > 0,
                 "Failed awaiting CreateTopics first request failure");
             IntegrationTestUtils.produceSynchronously(producerConfig, false, input, Optional.empty(),
                 asList(new KeyValueTimestamp<>("k2", "v2", 1L),
@@ -167,13 +169,15 @@ public class EOSUncleanShutdownIntegrationTest {
 
             driver.close();
 
+            final Path taskStateDirPath = taskStateDir.toPath();
+            final Path taskCheckpointFilePath = taskCheckpointFile.toPath();
             // Although there is an uncaught exception,
             // case 1: the state directory is cleaned up without any problems.
             // case 2: The state directory is not cleaned up, for it does not include any checkpoint file.
             // case 3: The state directory is not cleaned up, for it includes a checkpoint file but it is empty.
-            assertTrue(!taskStateDir.exists()
-                || (taskStateDir.exists() && taskStateDir.list().length > 0 && !taskCheckpointFile.exists())
-                || (taskCheckpointFile.exists() && taskCheckpointFile.length() == 0L));
+            assertTrue(Files.notExists(taskStateDirPath)
+                || (Files.exists(taskStateDirPath) && Files.size(taskStateDirPath) > 0 && Files.notExists(taskCheckpointFilePath))
+                || (Files.exists(taskCheckpointFilePath) && Files.size(taskCheckpointFilePath) == 0L));
 
             quietlyCleanStateAfterTest(CLUSTER, driver);
         }

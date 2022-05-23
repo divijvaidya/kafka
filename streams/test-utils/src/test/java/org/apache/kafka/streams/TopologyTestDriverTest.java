@@ -56,6 +56,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -1530,9 +1532,10 @@ public abstract class TopologyTestDriverTest {
         setup(Stores.persistentKeyValueStore("aggStore"));
         final String stateDir = config.getProperty(StreamsConfig.STATE_DIR_CONFIG);
         final File appDir = new File(stateDir, config.getProperty(StreamsConfig.APPLICATION_ID_CONFIG));
+        final Path appDirPath = appDir.toPath();
 
-        assertTrue(appDir.exists());
-        assertTrue(appDir.isDirectory());
+        assertTrue(Files.exists(appDirPath));
+        assertTrue(Files.isDirectory(appDirPath));
 
         final TaskId taskId = new TaskId(0, 0);
         assertTrue(new File(appDir, taskId.toString()).exists());

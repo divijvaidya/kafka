@@ -457,7 +457,7 @@ public class StateDirectory {
                 try {
                     if (lock(id)) {
                         final long now = time.milliseconds();
-                        final long lastModifiedMs = taskDir.file().lastModified();
+                        final long lastModifiedMs = Files.getLastModifiedTime(taskDir.file().toPath()).toMillis();
                         if (now - cleanupDelayMs > lastModifiedMs) {
                             log.info("{} Deleting obsolete state directory {} for task {} as {}ms has elapsed (cleanup delay is {}ms).",
                                 logPrefix(), dirName, id, now - lastModifiedMs, cleanupDelayMs);

@@ -19,6 +19,7 @@ package org.apache.kafka.common.security.ssl;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.Arrays;
@@ -202,27 +203,27 @@ public abstract class SslFactoryTest {
         sslEngineFactory = sslFactory.sslEngineFactory();
 
         // Verify that builder is recreated on reconfigure() if config is not changed, but truststore file was modified
-        trustStoreFile.setLastModified(System.currentTimeMillis() + 10000);
+        Files.setLastModifiedTime(trustStoreFile.toPath(), FileTime.fromMillis(System.currentTimeMillis() + 10_000));
         sslFactory.reconfigure(sslConfig);
         assertNotSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory not recreated");
         sslEngineFactory = sslFactory.sslEngineFactory();
 
         // Verify that builder is recreated on reconfigure() if config is not changed, but keystore file was modified
         File keyStoreFile = new File((String) sslConfig.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
-        keyStoreFile.setLastModified(System.currentTimeMillis() + 10000);
+        Files.setLastModifiedTime(keyStoreFile.toPath(), FileTime.fromMillis(System.currentTimeMillis() + 10_000));
         sslFactory.reconfigure(sslConfig);
         assertNotSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory not recreated");
         sslEngineFactory = sslFactory.sslEngineFactory();
 
         // Verify that builder is recreated after validation on reconfigure() if config is not changed, but keystore file was modified
-        keyStoreFile.setLastModified(System.currentTimeMillis() + 15000);
+        Files.setLastModifiedTime(keyStoreFile.toPath(), FileTime.fromMillis(System.currentTimeMillis() + 15_000));
         sslFactory.validateReconfiguration(sslConfig);
         sslFactory.reconfigure(sslConfig);
         assertNotSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory not recreated");
         sslEngineFactory = sslFactory.sslEngineFactory();
 
         // Verify that the builder is not recreated if modification time cannot be determined
-        keyStoreFile.setLastModified(System.currentTimeMillis() + 20000);
+        Files.setLastModifiedTime(keyStoreFile.toPath(), FileTime.fromMillis(System.currentTimeMillis() + 20_000));
         Files.delete(keyStoreFile.toPath());
         sslFactory.reconfigure(sslConfig);
         assertSame(sslEngineFactory, sslFactory.sslEngineFactory(), "SslEngineFactory recreated unnecessarily");

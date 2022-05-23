@@ -177,13 +177,14 @@ public class TestPlugins {
             throw new IOException("Could not find test plugin resource: " + resourceDir);
         }
         File file = new File(resource.getFile());
-        if (!file.isDirectory()) {
+        Path filePath = file.toPath();
+        if (!Files.isDirectory(filePath)) {
             throw new IOException("Resource is not a directory: " + resourceDir);
         }
-        if (!file.canRead()) {
+        if (!Files.isReadable(filePath)) {
             throw new IOException("Resource directory is not readable: " + resourceDir);
         }
-        return file.toPath();
+        return filePath;
     }
 
     private static JarOutputStream openJarFile(File jarFile) throws IOException {

@@ -137,7 +137,7 @@ public class RemoteLogMetadataSnapshotFile {
     public synchronized Optional<Snapshot> read() throws IOException {
 
         // Checking for empty files.
-        if (metadataStoreFile.length() == 0) {
+        if (Files.size(metadataStoreFile.toPath()) == 0) {
             return Optional.empty();
         }
 

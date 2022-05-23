@@ -120,10 +120,8 @@ public class StateDirectoryTest {
 
     @Test
     public void shouldCreateBaseDirectory() {
-        assertTrue(stateDir.exists());
-        assertTrue(stateDir.isDirectory());
-        assertTrue(appDir.exists());
-        assertTrue(appDir.isDirectory());
+        assertTrue(Files.isDirectory(stateDir.toPath()));
+        assertTrue(Files.isDirectory(appDir.toPath()));
     }
 
     @Test
@@ -148,9 +146,9 @@ public class StateDirectoryTest {
                 fail("Should create correct files and set correct permissions");
             }
         } else {
-            assertThat(file.canRead(), is(true));
-            assertThat(file.canWrite(), is(true));
-            assertThat(file.canExecute(), is(true));
+            assertThat(Files.isReadable(path), is(true));
+            assertThat(Files.isWritable(path), is(true));
+            assertThat(Files.isExecutable(path), is(true));
         }
     }
 
@@ -169,9 +167,8 @@ public class StateDirectoryTest {
     @Test
     public void shouldCreateTaskStateDirectory() {
         final TaskId taskId = new TaskId(0, 0);
-        final File taskDirectory = directory.getOrCreateDirectoryForTask(taskId);
-        assertTrue(taskDirectory.exists());
-        assertTrue(taskDirectory.isDirectory());
+        final Path taskDirectory = directory.getOrCreateDirectoryForTask(taskId).toPath();
+        assertTrue(Files.isDirectory(taskDirectory));
     }
 
     @Test
@@ -542,8 +539,7 @@ public class StateDirectoryTest {
 
         assertNotNull(runner.taskDirectory);
         assertTrue(passed.get());
-        assertTrue(runner.taskDirectory.exists());
-        assertTrue(runner.taskDirectory.isDirectory());
+        assertTrue(Files.isDirectory(runner.taskDirectory.toPath()));
     }
 
     @Test
@@ -649,17 +645,12 @@ public class StateDirectoryTest {
         directory.getOrCreateDirectoryForTask(new TaskId(0, 1, "topology1"));
         directory.getOrCreateDirectoryForTask(new TaskId(0, 0, "topology2"));
 
-        assertThat(new File(appDir, "__topology1__").exists(), is(true));
-        assertThat(new File(appDir, "__topology1__").isDirectory(), is(true));
-        assertThat(new File(appDir, "__topology2__").exists(), is(true));
-        assertThat(new File(appDir, "__topology2__").isDirectory(), is(true));
-
-        assertThat(new File(new File(appDir, "__topology1__"), "0_0").exists(), is(true));
-        assertThat(new File(new File(appDir, "__topology1__"), "0_0").isDirectory(), is(true));
-        assertThat(new File(new File(appDir, "__topology1__"), "0_1").exists(), is(true));
-        assertThat(new File(new File(appDir, "__topology1__"), "0_1").isDirectory(), is(true));
-        assertThat(new File(new File(appDir, "__topology2__"), "0_0").exists(), is(true));
-        assertThat(new File(new File(appDir, "__topology2__"), "0_0").isDirectory(), is(true));
+        final Path appDirPath = appDir.toPath();
+        assertTrue(Files.isDirectory(appDirPath.resolve("__topology1__")));
+        assertTrue(Files.isDirectory(appDirPath.resolve("__topology2__")));
+        assertTrue(Files.isDirectory(appDirPath.resolve("__topology1__").resolve("0_0")));
+        assertTrue(Files.isDirectory(appDirPath.resolve("__topology1__").resolve("0_1")));
+        assertTrue(Files.isDirectory(appDirPath.resolve("__topology2__").resolve("0_0")));
     }
 
     @Test

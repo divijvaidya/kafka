@@ -21,6 +21,7 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
@@ -74,16 +75,17 @@ public class ConfigurationUtils {
             throw new ConfigException(name, url.toString(), String.format("The OAuth configuration option %s contains a URL (%s) that is malformed: %s", name, url, e.getMessage()));
         }
 
-        if (!file.exists())
+        final Path filePath = file.toPath();
+        if (Files.notExists(filePath))
             throw new ConfigException(name, file, String.format("The OAuth configuration option %s contains a file (%s) that doesn't exist", name, file));
 
-        if (!file.canRead())
+        if (!Files.isReadable(filePath))
             throw new ConfigException(name, file, String.format("The OAuth configuration option %s contains a file (%s) that doesn't have read permission", name, file));
 
-        if (file.isDirectory())
+        if (Files.isDirectory(filePath))
             throw new ConfigException(name, file, String.format("The OAuth configuration option %s references a directory (%s), not a file", name, file));
 
-        return file.toPath();
+        return filePath;
     }
 
     /**

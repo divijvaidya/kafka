@@ -121,7 +121,7 @@ class LogLoader(
     // Second pass: delete segments that are between minSwapFileOffset and maxSwapFileOffset. As
     // discussed above, these segments were compacted or split but haven't been renamed to .delete
     // before shutting down the broker.
-    for (file <- dir.listFiles if file.isFile) {
+    for (file <- dir.listFiles if Files.isRegularFile(file.toPath)) {
       try {
         if (!file.getName.endsWith(SwapFileSuffix)) {
           val offset = offsetFromFile(file)
@@ -138,7 +138,7 @@ class LogLoader(
     }
 
     // Third pass: rename all swap files.
-    for (file <- dir.listFiles if file.isFile) {
+    for (file <- dir.listFiles if Files.isRegularFile(file.toPath)) {
       if (file.getName.endsWith(SwapFileSuffix)) {
         info(s"Recovering file ${file.getName} by renaming from ${UnifiedLog.SwapFileSuffix} files.")
         file.renameTo(new File(CoreUtils.replaceSuffix(file.getPath, UnifiedLog.SwapFileSuffix, "")))
@@ -222,13 +222,14 @@ class LogLoader(
     val cleanedFiles = mutable.Set[File]()
     var minCleanedFileOffset = Long.MaxValue
 
-    for (file <- dir.listFiles if file.isFile) {
-      if (!file.canRead)
+    for (file <- dir.listFiles if Files.isRegularFile(file.toPath)) {
+      val filePath = file.toPath
+      if (!Files.isReadable(filePath))
         throw new IOException(s"Could not read file $file")
       val filename = file.getName
       if (filename.endsWith(DeletedFileSuffix)) {
         debug(s"Deleting stray temporary file ${file.getAbsolutePath}")
-        Files.deleteIfExists(file.toPath)
+        Files.deleteIfExists(filePath)
       } else if (filename.endsWith(CleanedFileSuffix)) {
         minCleanedFileOffset = Math.min(offsetFromFile(file), minCleanedFileOffset)
         cleanedFiles += file
@@ -300,14 +301,15 @@ class LogLoader(
   private def loadSegmentFiles(): Unit = {
     // load segments in ascending order because transactional data from one segment may depend on the
     // segments that come before it
-    for (file <- dir.listFiles.sortBy(_.getName) if file.isFile) {
+    for (file <- dir.listFiles.sortBy(_.getName) if Files.isRegularFile(file.toPath)) {
+      val filePath = file.toPath
       if (isIndexFile(file)) {
         // if it is an index file, make sure it has a corresponding .log file
         val offset = offsetFromFile(file)
-        val logFile = UnifiedLog.logFile(dir, offset)
-        if (!logFile.exists) {
+        val logFile = UnifiedLog.logFile(dir, offset).toPath
+        if (Files.notExists(logFile)) {
           warn(s"Found an orphaned index file ${file.getAbsolutePath}, with no corresponding log file.")
-          Files.deleteIfExists(file.toPath)
+          Files.deleteIfExists(filePath)
         }
       } else if (isLogFile(file)) {
         // if it's a log file, load the corresponding log segment

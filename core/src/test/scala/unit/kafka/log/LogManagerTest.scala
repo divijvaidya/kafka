@@ -31,13 +31,14 @@ import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{doAnswer, mock, never, spy, times, verify}
+
 import java.io._
 import java.nio.file.Files
 import java.util.concurrent.Future
 import java.util.{Collections, Properties}
-
 import org.apache.kafka.server.metrics.KafkaYammerMetrics
 
+import java.nio.file.attribute.FileTime
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
@@ -219,7 +220,7 @@ class LogManagerTest {
     assertTrue(log.numberOfSegments > 1, "There should be more than one segment now.")
     log.updateHighWatermark(log.logEndOffset)
 
-    log.logSegments.foreach(_.log.file.setLastModified(time.milliseconds))
+    log.logSegments.foreach(segment => Files.setLastModifiedTime(segment.log.file.toPath, FileTime.fromMillis(time.milliseconds)))
 
     time.sleep(maxLogAgeMs + 1)
     assertEquals(1, log.numberOfSegments, "Now there should only be only one segment in the index.")
@@ -318,7 +319,7 @@ class LogManagerTest {
     val numSegments = log.numberOfSegments
     assertTrue(log.numberOfSegments > 1, "There should be more than one segment now.")
 
-    log.logSegments.foreach(_.log.file.setLastModified(time.milliseconds))
+    log.logSegments.foreach(segment => Files.setLastModifiedTime(segment.log.file.toPath, FileTime.fromMillis(time.milliseconds)))
 
     time.sleep(maxLogAgeMs + 1)
     assertEquals(numSegments, log.numberOfSegments, "number of segments shouldn't have changed")
