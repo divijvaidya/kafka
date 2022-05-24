@@ -19,7 +19,6 @@ package kafka.log
 
 import java.io.{File, IOException}
 import java.nio.file.{Files, NoSuchFileException}
-
 import kafka.common.LogSegmentOffsetOverflowException
 import kafka.log.UnifiedLog.{CleanedFileSuffix, DeletedFileSuffix, SwapFileSuffix, isIndexFile, isLogFile, offsetFromFile}
 import kafka.server.{LogDirFailureChannel, LogOffsetMetadata}
@@ -30,6 +29,7 @@ import org.apache.kafka.common.errors.InvalidOffsetException
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.{Set, mutable}
+import scala.util.Try
 
 case class LoadedLogOffsets(logStartOffset: Long,
                             recoveryPoint: Long,
@@ -121,6 +121,11 @@ class LogLoader(
     // Second pass: delete segments that are between minSwapFileOffset and maxSwapFileOffset. As
     // discussed above, these segments were compacted or split but haven't been renamed to .delete
     // before shutting down the broker.
+    try {
+      Files.list()
+    } finally {
+      
+    }
     for (file <- dir.listFiles if file.isFile) {
       try {
         if (!file.getName.endsWith(SwapFileSuffix)) {

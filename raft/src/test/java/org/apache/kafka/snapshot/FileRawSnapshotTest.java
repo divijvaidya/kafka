@@ -282,7 +282,7 @@ public final class FileRawSnapshotTest {
 
         // File should not exist since freeze was not called before
         assertFalse(Files.exists(Snapshots.snapshotPath(tempDir, offsetAndEpoch)));
-        assertEquals(0, Files.list(Snapshots.snapshotDir(tempDir)).count());
+        assertEquals(0, Snapshots.snapshotDir(tempDir).toFile().list().length);
     }
 
     @Test

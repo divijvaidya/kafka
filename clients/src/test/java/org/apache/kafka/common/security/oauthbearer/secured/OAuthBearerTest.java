@@ -31,6 +31,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
@@ -173,7 +174,7 @@ public abstract class OAuthBearerTest {
         String suffix,
         String contents)
         throws IOException {
-        File file = File.createTempFile(prefix, suffix, tmpDir);
+        File file = Files.createTempFile(tmpDir.toPath(),prefix, suffix).toFile();
         log.debug("Created new temp file {}", file);
         file.deleteOnExit();
 

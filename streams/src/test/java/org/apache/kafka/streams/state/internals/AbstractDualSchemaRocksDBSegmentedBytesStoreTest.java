@@ -65,6 +65,9 @@ import org.junit.Test;
 import org.rocksdb.WriteBatch;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1021,7 +1024,7 @@ public abstract class AbstractDualSchemaRocksDBSegmentedBytesStoreTest<S extends
     }
 
     @Test
-    public void shouldLoadSegmentsWithOldStyleDateFormattedName() {
+    public void shouldLoadSegmentsWithOldStyleDateFormattedName() throws IOException {
         final AbstractSegments<S> segments = newSegments();
         final String key = "a";
 
@@ -1035,9 +1038,9 @@ public abstract class AbstractDualSchemaRocksDBSegmentedBytesStoreTest<S extends
         final SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmm");
         formatter.setTimeZone(new SimpleTimeZone(0, "UTC"));
         final String formatted = formatter.format(new Date(segmentId * segmentInterval));
-        final File parent = new File(stateDir, storeName);
-        final File oldStyleName = new File(parent, nameParts[0] + "-" + formatted);
-        assertTrue(new File(parent, firstSegmentName).renameTo(oldStyleName));
+        final Path parent = new File(stateDir, storeName).toPath();
+        final Path oldStyleName = parent.resolve(nameParts[0] + "-" + formatted);
+        Utils.atomicMoveWithFallback(parent.resolve(firstSegmentName), oldStyleName);
 
         bytesStore = getBytesStore();
 
@@ -1057,7 +1060,7 @@ public abstract class AbstractDualSchemaRocksDBSegmentedBytesStoreTest<S extends
     }
 
     @Test
-    public void shouldLoadSegmentsWithOldStyleColonFormattedName() {
+    public void shouldLoadSegmentsWithOldStyleColonFormattedName() throws IOException {
         final AbstractSegments<S> segments = newSegments();
         final String key = "a";
 
@@ -1067,9 +1070,9 @@ public abstract class AbstractDualSchemaRocksDBSegmentedBytesStoreTest<S extends
 
         final String firstSegmentName = segments.segmentName(0);
         final String[] nameParts = firstSegmentName.split("\\.");
-        final File parent = new File(stateDir, storeName);
-        final File oldStyleName = new File(parent, nameParts[0] + ":" + Long.parseLong(nameParts[1]));
-        assertTrue(new File(parent, firstSegmentName).renameTo(oldStyleName));
+        final Path parent = new File(stateDir, storeName).toPath();
+        final Path oldStyleName = parent.resolve(nameParts[0] + ":" + Long.parseLong(nameParts[1]));
+        Utils.atomicMoveWithFallback(parent.resolve(firstSegmentName), oldStyleName);
 
         bytesStore = getBytesStore();
 

@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.streams.state.internals;
 
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.errors.ProcessorStateException;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.slf4j.Logger;
@@ -23,10 +24,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -34,6 +36,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.SimpleTimeZone;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 abstract class AbstractSegments<S extends Segment> implements Segments<S> {
     private static final Logger log = LoggerFactory.getLogger(AbstractSegments.class);
@@ -94,20 +97,18 @@ abstract class AbstractSegments<S extends Segment> implements Segments<S> {
     @Override
     public void openExisting(final ProcessorContext context, final long streamTime) {
         try {
-            final File dir = new File(context.stateDir(), name);
-            if (dir.exists()) {
-                final String[] list = dir.list();
-                if (list != null) {
-                    Arrays.stream(list)
+            final Path dir = new File(context.stateDir(), name).toPath();
+            if (Files.isDirectory(dir)) {
+                try (Stream<Path> stream = Files.list(dir)) {
+                    stream.map(Path::getFileName)
+                            .map(Path::toString)
                             .map(segment -> segmentIdFromSegmentName(segment, dir))
                             .sorted() // open segments in the id order
                             .filter(segmentId -> segmentId >= 0)
                             .forEach(segmentId -> getOrCreateSegment(segmentId, context));
                 }
             } else {
-                if (!dir.mkdir()) {
-                    throw new ProcessorStateException(String.format("dir %s doesn't exist and cannot be created for segments %s", dir, name));
-                }
+                Files.createDirectory(dir);
             }
         } catch (final Exception ex) {
             // ignore
@@ -190,7 +191,7 @@ abstract class AbstractSegments<S extends Segment> implements Segments<S> {
     }
 
     private long segmentIdFromSegmentName(final String segmentName,
-                                          final File parent) {
+                                          final Path parent) {
         final int segmentSeparatorIndex = name.length();
         final char segmentSeparator = segmentName.charAt(segmentSeparatorIndex);
         final String segmentIdString = segmentName.substring(segmentSeparatorIndex + 1);
@@ -223,16 +224,21 @@ abstract class AbstractSegments<S extends Segment> implements Segments<S> {
 
     }
 
-    private void renameSegmentFile(final File parent,
+    private void renameSegmentFile(final Path parent,
                                    final String segmentName,
                                    final long segmentId) {
-        final File newName = new File(parent, segmentName(segmentId));
-        final File oldName = new File(parent, segmentName);
-        if (!oldName.renameTo(newName)) {
+        final Path newName = parent.resolve(segmentName(segmentId));
+        final Path oldName = parent.resolve(segmentName);
+        try {
+            // This method is called for same parent directory multiple times and we don't want to repeatedly flush
+            // the same directory multiple times.
+            final boolean needFlushParentDir = false;
+            Utils.atomicMoveWithFallback(oldName, newName, needFlushParentDir);
+        } catch (IOException e) {
             throw new ProcessorStateException("Unable to rename old style segment from: "
-                + oldName
-                + " to new name: "
-                + newName);
+                    + oldName
+                    + " to new name: "
+                    + newName);
         }
     }
 
