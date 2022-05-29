@@ -18,7 +18,7 @@
 package kafka.log
 
 import java.io.{File, IOException}
-import java.nio.file.{Files, NoSuchFileException}
+import java.nio.file.{Files, NoSuchFileException, Path}
 import kafka.common.LogSegmentOffsetOverflowException
 import kafka.log.UnifiedLog.{CleanedFileSuffix, DeletedFileSuffix, SwapFileSuffix, isIndexFile, isLogFile, offsetFromFile}
 import kafka.server.{LogDirFailureChannel, LogOffsetMetadata}
@@ -26,7 +26,7 @@ import kafka.server.epoch.LeaderEpochFileCache
 import kafka.utils.{CoreUtils, Logging, Scheduler}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.InvalidOffsetException
-import org.apache.kafka.common.utils.Time
+import org.apache.kafka.common.utils.{Time, Utils}
 
 import scala.collection.{Set, mutable}
 import scala.util.Try
@@ -106,14 +106,14 @@ class LogLoader(
     // We store segments that require renaming in this code block, and do the actual renaming later.
     var minSwapFileOffset = Long.MaxValue
     var maxSwapFileOffset = Long.MinValue
-    swapFiles.filter(f => UnifiedLog.isLogFile(new File(CoreUtils.replaceSuffix(f.getPath, SwapFileSuffix, "")))).foreach { f =>
-      val baseOffset = offsetFromFile(f)
-      val segment = LogSegment.open(f.getParentFile,
+    swapFiles.filter(f => UnifiedLog.isLogFile(new File(CoreUtils.replaceSuffix(f, SwapFileSuffix, "")))).foreach { f =>
+      val baseOffset = offsetFromFile(f.toFile)
+      val segment = LogSegment.open(f.getParent.toFile,
         baseOffset = baseOffset,
         config,
         time = time,
         fileSuffix = UnifiedLog.SwapFileSuffix)
-      info(s"Found log file ${f.getPath} from interrupted swap operation, which is recoverable from ${UnifiedLog.SwapFileSuffix} files by renaming.")
+      info(s"Found log file $f from interrupted swap operation, which is recoverable from ${UnifiedLog.SwapFileSuffix} files by renaming.")
       minSwapFileOffset = Math.min(segment.baseOffset, minSwapFileOffset)
       maxSwapFileOffset = Math.max(segment.readNextOffset, maxSwapFileOffset)
     }
@@ -122,32 +122,35 @@ class LogLoader(
     // discussed above, these segments were compacted or split but haven't been renamed to .delete
     // before shutting down the broker.
     try {
-      Files.list()
-    } finally {
-      
-    }
-    for (file <- dir.listFiles if file.isFile) {
+      val fileStream = Files.list(dir.toPath)
       try {
-        if (!file.getName.endsWith(SwapFileSuffix)) {
-          val offset = offsetFromFile(file)
-          if (offset >= minSwapFileOffset && offset < maxSwapFileOffset) {
-            info(s"Deleting segment files ${file.getName} that is compacted but has not been deleted yet.")
-            file.delete()
-          }
-        }
-      } catch {
-        // offsetFromFile with files that do not include an offset in the file name
-        case _: StringIndexOutOfBoundsException =>
-        case _: NumberFormatException =>
+        fileStream.filter(f => Files.isRegularFile(f))
+          .filter(!_.getFileName().toString.endsWith(SwapFileSuffix))
+          .filter(filePath => {
+            val offset = offsetFromFile(filePath.toFile)
+            offset >= minSwapFileOffset && offset < maxSwapFileOffset
+          }).forEach(filePath => Files.delete(filePath))
+      } finally {
+        fileStream.close()
       }
+    } catch {
+      // offsetFromFile with files that do not include an offset in the file name
+      case _: StringIndexOutOfBoundsException =>
+      case _: NumberFormatException =>
     }
 
     // Third pass: rename all swap files.
-    for (file <- dir.listFiles if file.isFile) {
-      if (file.getName.endsWith(SwapFileSuffix)) {
-        info(s"Recovering file ${file.getName} by renaming from ${UnifiedLog.SwapFileSuffix} files.")
-        file.renameTo(new File(CoreUtils.replaceSuffix(file.getPath, UnifiedLog.SwapFileSuffix, "")))
-      }
+    val fileStream = Files.list(dir.toPath)
+    try {
+      fileStream.filter(f => Files.isRegularFile(f))
+        .filter(_.getFileName().toString.toLowerCase.endsWith(SwapFileSuffix))
+        .forEach(filePath => {
+          info(s"Recovering file ${filePath.getFileName.toString} by renaming from ${UnifiedLog.SwapFileSuffix} files.")
+          val newPath = new File(CoreUtils.replaceSuffix(filePath.getFileName.toString, UnifiedLog.SwapFileSuffix, "")).toPath
+          Utils.atomicMoveWithFallback(filePath, newPath, false)
+        })
+    } finally {
+      fileStream.close()
     }
 
     // Fourth pass: load all the log and index files.
@@ -221,40 +224,45 @@ class LogLoader(
    *
    * @return Set of .swap files that are valid to be swapped in as segment files and index files
    */
-  private def removeTempFilesAndCollectSwapFiles(): Set[File] = {
+  private def removeTempFilesAndCollectSwapFiles(): Set[Path] = {
 
-    val swapFiles = mutable.Set[File]()
-    val cleanedFiles = mutable.Set[File]()
+    val swapFiles = mutable.Set[Path]()
+    val cleanedFiles = mutable.Set[Path]()
     var minCleanedFileOffset = Long.MaxValue
 
-    for (file <- dir.listFiles if file.isFile) {
-      if (!file.canRead)
-        throw new IOException(s"Could not read file $file")
-      val filename = file.getName
-      if (filename.endsWith(DeletedFileSuffix)) {
-        debug(s"Deleting stray temporary file ${file.getAbsolutePath}")
-        Files.deleteIfExists(file.toPath)
-      } else if (filename.endsWith(CleanedFileSuffix)) {
-        minCleanedFileOffset = Math.min(offsetFromFile(file), minCleanedFileOffset)
-        cleanedFiles += file
-      } else if (filename.endsWith(SwapFileSuffix)) {
-        swapFiles += file
-      }
+    val fileStream = Files.list(dir.toPath)
+    try {
+      fileStream
+        .filter(file => Files.isRegularFile(file))
+        .forEach(file => {
+          val fileName = file.getFileName
+          if (fileName.toString.endsWith(DeletedFileSuffix)) {
+            debug(s"Deleting stray temporary file ${fileName.toAbsolutePath}")
+            Files.delete(file)
+          } else if (fileName.toString.endsWith(CleanedFileSuffix)) {
+            minCleanedFileOffset = Math.min(offsetFromFile(file.toFile), minCleanedFileOffset)
+            cleanedFiles += file
+          } else if (fileName.toString.endsWith(SwapFileSuffix)) {
+            swapFiles += file
+          }
+        })
+    } finally {
+      fileStream.close()
     }
 
     // KAFKA-6264: Delete all .swap files whose base offset is greater than the minimum .cleaned segment offset. Such .swap
     // files could be part of an incomplete split operation that could not complete. See Log#splitOverflowedSegment
     // for more details about the split operation.
-    val (invalidSwapFiles, validSwapFiles) = swapFiles.partition(file => offsetFromFile(file) >= minCleanedFileOffset)
+    val (invalidSwapFiles, validSwapFiles) = swapFiles.partition(file => offsetFromFile(file.toFile) >= minCleanedFileOffset)
     invalidSwapFiles.foreach { file =>
-      debug(s"Deleting invalid swap file ${file.getAbsoluteFile} minCleanedFileOffset: $minCleanedFileOffset")
-      Files.deleteIfExists(file.toPath)
+      debug(s"Deleting invalid swap file ${file.toAbsolutePath} minCleanedFileOffset: $minCleanedFileOffset")
+      Files.deleteIfExists(file)
     }
 
     // Now that we have deleted all .swap files that constitute an incomplete split operation, let's delete all .clean files
     cleanedFiles.foreach { file =>
-      debug(s"Deleting stray .clean file ${file.getAbsolutePath}")
-      Files.deleteIfExists(file.toPath)
+      debug(s"Deleting stray .clean file ${file.toAbsolutePath}")
+      Files.deleteIfExists(file)
     }
 
     validSwapFiles
