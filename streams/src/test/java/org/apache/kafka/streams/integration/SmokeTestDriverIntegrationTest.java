@@ -24,13 +24,11 @@ import org.apache.kafka.streams.integration.utils.IntegrationTestUtils;
 import org.apache.kafka.streams.tests.SmokeTestClient;
 import org.apache.kafka.streams.tests.SmokeTestDriver;
 import org.apache.kafka.test.IntegrationTest;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.Timeout;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -41,19 +39,19 @@ import java.util.Set;
 
 import static org.apache.kafka.streams.tests.SmokeTestDriver.generate;
 import static org.apache.kafka.streams.tests.SmokeTestDriver.verify;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Timeout(600)
 @Category(IntegrationTest.class)
 public class SmokeTestDriverIntegrationTest {
-    @Rule
-    public Timeout globalTimeout = Timeout.seconds(600);
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3);
 
-    @BeforeClass
+    @BeforeAll
     public static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void closeCluster() {
         CLUSTER.stop();
     }
@@ -165,6 +163,6 @@ public class SmokeTestDriverIntegrationTest {
             driver.exception().printStackTrace();
             throw new AssertionError(driver.exception());
         }
-        Assert.assertTrue(driver.result().result(), driver.result().passed());
+        assertTrue(driver.result().passed(), driver.result().result());
     }
 }
