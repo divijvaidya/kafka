@@ -284,7 +284,7 @@ class LogTest {
     val reopened = createLog(logDir, logConfig)
     assertEquals(Some(LogOffsetMetadata(3L)), reopened.producerStateManager.firstUnstableOffset)
 
-    log.truncateTo(reopened)(0L)
+    reopened.truncateTo(0L)
     assertEquals(None, reopened.firstUnstableOffset)
     assertEquals(Map.empty, reopened.producerStateManager.activeProducers)
   }
@@ -326,7 +326,7 @@ class LogTest {
     val reopened = createLog(logDir, logConfig)
     assertEquals(Some(LogOffsetMetadata(3L)), reopened.producerStateManager.firstUnstableOffset)
 
-    log.truncateFullyAndStartAt(reopened)(0L)
+    reopened.truncateFullyAndStartAt(0L)
     assertEquals(None, reopened.firstUnstableOffset)
     assertEquals(Map.empty, reopened.producerStateManager.activeProducers)
   }
