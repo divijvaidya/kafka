@@ -100,7 +100,7 @@ public class KTableSourceTopicRestartIntegrationTest {
 
     @BeforeEach
     public void before(final TestInfo testInfo) throws Exception {
-        sourceTopic = SOURCE_TOPIC + "-" + testInfo.getTestMethod().map(Method::getName);
+        sourceTopic = SOURCE_TOPIC + "-" + testInfo.getTestMethod().map(Method::getName).get();
         CLUSTER.createTopic(sourceTopic);
 
         STREAMS_CONFIG.put(StreamsConfig.APPLICATION_ID_CONFIG, IntegrationTestUtils.safeUniqueTestName(getClass(), testInfo));
