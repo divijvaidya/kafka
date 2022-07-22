@@ -466,6 +466,7 @@ subprojects {
     if (shouldUseJUnit5) {
       useJUnitPlatform {
         includeTags "integration"
+        includeEngines 'junit-vintage'
       }
     } else {
       useJUnit {
