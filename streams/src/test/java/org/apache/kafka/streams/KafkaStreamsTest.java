@@ -20,9 +20,11 @@ import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ListOffsetsResult;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
 import org.apache.kafka.clients.admin.MockAdminClient;
+import org.apache.kafka.clients.admin.RemoveMembersFromConsumerGroupOptions;
 import org.apache.kafka.clients.admin.RemoveMembersFromConsumerGroupResult;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.MockConsumer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.clients.producer.MockProducer;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.KafkaFuture;
@@ -50,7 +52,6 @@ import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.processor.internals.GlobalStreamThread;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder;
 import org.apache.kafka.streams.processor.internals.StateDirectory;
 import org.apache.kafka.streams.processor.internals.StreamThread;
 import org.apache.kafka.streams.processor.internals.StreamsMetadataState;
@@ -104,9 +105,11 @@ import static org.apache.kafka.streams.integration.utils.IntegrationTestUtils.wa
 import static org.apache.kafka.streams.state.QueryableStoreTypes.keyValueStore;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
 
+import static org.easymock.EasyMock.anyObject;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -116,6 +119,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.mockConstruction;
@@ -146,7 +150,6 @@ public class KafkaStreamsTest {
 
     private MockClientSupplier supplier;
     private MockTime time;
-
     private Properties props;
     
     @Mock
@@ -165,6 +168,7 @@ public class KafkaStreamsTest {
     MockedStatic<KafkaStreams> kafkaStreamsMockedStatic;
     MockedStatic<ClientMetrics> clientMetricsMockedStatic;
     MockedStatic<StreamThread> streamThreadMockedStatic;
+    MockedStatic<StreamsConfigUtils> streamsConfigUtils;
 
     MockedConstruction<GlobalStreamThread> globalStreamThreadMockedConstruction;
     MockedConstruction<StateDirectory> stateDirectoryMockedConstruction;
@@ -210,13 +214,14 @@ public class KafkaStreamsTest {
         clientMetricsMockedStatic.close();
         streamThreadMockedStatic.close();
         globalStreamThreadMockedConstruction.close();
+        streamsConfigUtils.close();
     }
 
     private void prepareStreams() throws Exception {
         // setup metrics
         kafkaStreamsMockedStatic = mockStatic(KafkaStreams.class, withSettings()
                 .defaultAnswer(InvocationOnMock::callRealMethod));
-        kafkaStreamsMockedStatic.when(() -> KafkaStreams.createThisMetrics(
+        kafkaStreamsMockedStatic.when(() -> KafkaStreams.createMetrics(
                 any(MetricConfig.class),
                 metricsReportersCapture.capture(),
                 any(Time.class),
@@ -265,8 +270,9 @@ public class KafkaStreamsTest {
                 any()
         )).thenReturn(streamThreadOne).thenReturn(streamThreadTwo);
 
-        streamThreadMockedStatic.when(() -> StreamThread.eosEnabled(any(StreamsConfig.class))).thenReturn(false);
-        streamThreadMockedStatic.when(() -> StreamThread.processingMode(any(StreamsConfig.class))).thenReturn(StreamThread.ProcessingMode.AT_LEAST_ONCE);
+        streamsConfigUtils = mockStatic(StreamsConfigUtils.class);
+        streamsConfigUtils.when(() -> StreamsConfigUtils.processingMode(anyObject(StreamsConfig.class))).thenReturn(StreamsConfigUtils.ProcessingMode.AT_LEAST_ONCE);
+        streamsConfigUtils.when(() -> StreamsConfigUtils.eosEnabled(anyObject(StreamsConfig.class))).thenReturn(false);
         when(streamThreadOne.getId()).thenReturn(1L);
         when(streamThreadTwo.getId()).thenReturn(2L);
 
@@ -560,7 +566,7 @@ public class KafkaStreamsTest {
         try (final KafkaStreams streams = new KafkaStreams(getBuilderWithSource().build(), props, supplier, time)) {
             final int newInitCount = MockMetricsReporter.INIT_COUNT.get();
             final int initDiff = newInitCount - oldInitCount;
-            assertTrue("some reporters including MockMetricsReporter should be initialized by calling on construction", initDiff == 1);
+            assertEquals("some reporters including MockMetricsReporter should be initialized by calling on construction", 1, initDiff);
 
             streams.start();
             final int oldCloseCount = MockMetricsReporter.CLOSE_COUNT.get();
@@ -824,6 +830,7 @@ public class KafkaStreamsTest {
         assertThat(streams.state() == State.PENDING_SHUTDOWN, equalTo(true));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void shouldThrowOnCleanupWhileShuttingDownStreamClosedWithCloseOptionLeaveGroupFalse() throws InterruptedException, ExecutionException {
 
@@ -833,16 +840,16 @@ public class KafkaStreamsTest {
 
         final MockAdminClient mockAdminClient = spy(MockAdminClient.class);
 
-        final MockConsumer<byte[], byte[]> mockConsumer = spy(MockConsumer.class);
+        final MockConsumer<byte[], byte[]> mockConsumer = mock(MockConsumer.class, withSettings().useConstructor(OffsetResetStrategy.EARLIEST));
 
         final ConsumerGroupMetadata consumerGroupMetadata = mock(ConsumerGroupMetadata.class);
 
         final Optional<String> groupInstanceId = Optional.of("test-instance-id");
 
-        when(memberResultFuture.get());
+        when(memberResultFuture.get()).thenAnswer(invocation -> null);
         when(result.memberResult(any())).thenReturn(memberResultFuture);
         when(consumerGroupMetadata.groupInstanceId()).thenReturn(groupInstanceId);
-        when(mockAdminClient.removeMembersFromConsumerGroup(any(), any())).thenReturn(result);
+        doReturn(result).when(mockAdminClient).removeMembersFromConsumerGroup(any(), any());
         when(mockConsumer.groupMetadata()).thenReturn(consumerGroupMetadata);
 
         final MockClientSupplier mockClientSupplier = spy(MockClientSupplier.class);
@@ -1029,23 +1036,23 @@ public class KafkaStreamsTest {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void shouldReturnFalseOnCloseWithCloseOptionWithLeaveGroupTrueWhenThreadsHaventTerminated() throws ExecutionException, InterruptedException {
-
         final RemoveMembersFromConsumerGroupResult result = mock(RemoveMembersFromConsumerGroupResult.class);
 
         final KafkaFuture<Void> memberResultFuture = mock(KafkaFuture.class);
 
         final MockAdminClient mockAdminClient = spy(MockAdminClient.class);
-        when(mockAdminClient.removeMembersFromConsumerGroup(any(), any())).thenReturn(result);
+        doReturn(result).when(mockAdminClient).removeMembersFromConsumerGroup(any(String.class), any(RemoveMembersFromConsumerGroupOptions.class));
 
-        final MockConsumer<byte[], byte[]> mockConsumer = spy(MockConsumer.class);
+        final MockConsumer<byte[], byte[]> mockConsumer = mock(MockConsumer.class, withSettings().useConstructor(OffsetResetStrategy.EARLIEST));
 
         final ConsumerGroupMetadata consumerGroupMetadata = mock(ConsumerGroupMetadata.class);
 
         final Optional<String> groupInstanceId = Optional.of("test-instance-id");
 
-        doNothing().when(memberResultFuture.get());
+        when(memberResultFuture.get()).then(invocation -> null);
         when(result.memberResult(any())).thenReturn(memberResultFuture);
         when(consumerGroupMetadata.groupInstanceId()).thenReturn(groupInstanceId);
         when(mockConsumer.groupMetadata()).thenReturn(consumerGroupMetadata);
@@ -1068,7 +1075,7 @@ public class KafkaStreamsTest {
         final RemoveMembersFromConsumerGroupResult result = mock(RemoveMembersFromConsumerGroupResult.class);
 
         final MockAdminClient mockAdminClient = spy(MockAdminClient.class);
-        when(mockAdminClient.removeMembersFromConsumerGroup(any(), any())).thenReturn(result);
+        doReturn(result).when(mockAdminClient).removeMembersFromConsumerGroup(any(), any());
 
         final MockClientSupplier mockClientSupplier = spy(MockClientSupplier.class);
         when(mockClientSupplier.getAdmin(any())).thenReturn(mockAdminClient);
@@ -1081,6 +1088,7 @@ public class KafkaStreamsTest {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void shouldNotBlockInCloseWithCloseOptionLeaveGroupTrueForZeroDuration() throws ExecutionException, InterruptedException {
         final RemoveMembersFromConsumerGroupResult result = mock(RemoveMembersFromConsumerGroupResult.class);
@@ -1088,17 +1096,17 @@ public class KafkaStreamsTest {
         final KafkaFuture<Void> memberResultFuture = mock(KafkaFuture.class);
 
         final MockAdminClient mockAdminClient = spy(MockAdminClient.class);
+        doReturn(result).when(mockAdminClient).removeMembersFromConsumerGroup(any(), any());
 
-        final MockConsumer<byte[], byte[]> mockConsumer = spy(MockConsumer.class);
+        final MockConsumer<byte[], byte[]> mockConsumer = mock(MockConsumer.class, withSettings().useConstructor(OffsetResetStrategy.EARLIEST));
 
         final ConsumerGroupMetadata consumerGroupMetadata = mock(ConsumerGroupMetadata.class);
 
         final Optional<String> groupInstanceId = Optional.of("test-instance-id");
 
-        when(memberResultFuture.get());
+        when(memberResultFuture.get()).thenAnswer(invocation -> null);
         when(result.memberResult(any())).thenReturn(memberResultFuture);
         when(consumerGroupMetadata.groupInstanceId()).thenReturn(groupInstanceId);
-        when(mockAdminClient.removeMembersFromConsumerGroup(any(), any())).thenReturn(result);
         when(mockConsumer.groupMetadata()).thenReturn(consumerGroupMetadata);
 
         final MockClientSupplier mockClientSupplier = spy(MockClientSupplier.class);
@@ -1118,8 +1126,7 @@ public class KafkaStreamsTest {
     public void shouldTriggerRecordingOfRocksDBMetricsIfRecordingLevelIsDebug() {
         final MockedStatic<Executors> executorsMockedStatic = mockStatic(Executors.class);
         final ScheduledExecutorService cleanupSchedule = mock(ScheduledExecutorService.class, withSettings().lenient());
-        final ScheduledExecutorService rocksDBMetricsRecordingTriggerThread =
-            mock(ScheduledExecutorService.class);
+        final ScheduledExecutorService rocksDBMetricsRecordingTriggerThread = mock(ScheduledExecutorService.class);
 
         executorsMockedStatic.when(() -> Executors.newSingleThreadScheduledExecutor(
             any(ThreadFactory.class)
@@ -1151,7 +1158,6 @@ public class KafkaStreamsTest {
     public void shouldNotTriggerRecordingOfRocksDBMetricsIfRecordingLevelIsInfo() {
         final MockedStatic<Executors> executorsMockedStatic = mockStatic(Executors.class);
         final ScheduledExecutorService cleanupSchedule = mock(ScheduledExecutorService.class, withSettings().lenient());
-        final ScheduledExecutorService rocksDBMetricsRecordingTriggerThread = mock(ScheduledExecutorService.class);
         executorsMockedStatic.when(() ->
                 Executors.newSingleThreadScheduledExecutor(any(ThreadFactory.class))).thenReturn(cleanupSchedule);
 

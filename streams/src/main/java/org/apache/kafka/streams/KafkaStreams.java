@@ -993,7 +993,7 @@ public class KafkaStreams implements AutoCloseable {
     }
 
     // Ensure Mockito stub construct with capture argument for KafkaStreamsTest.
-    public static Metrics createThisMetrics(final MetricConfig metricConfig, final List<MetricsReporter> reporters, final Time time, final MetricsContext metricsContext) {
+    public static Metrics createMetrics(final MetricConfig metricConfig, final List<MetricsReporter> reporters, final Time time, final MetricsContext metricsContext) {
         return new Metrics(metricConfig, reporters, time, metricsContext);
     }
 
@@ -1010,7 +1010,7 @@ public class KafkaStreams implements AutoCloseable {
         reporters.add(jmxReporter);
         final MetricsContext metricsContext = new KafkaMetricsContext(JMX_PREFIX,
                                                                       config.originalsWithPrefix(CommonClientConfigs.METRICS_CONTEXT_PREFIX));
-        return createThisMetrics(metricConfig, reporters, time, metricsContext);
+        return createMetrics(metricConfig, reporters, time, metricsContext);
     }
 
     /**
