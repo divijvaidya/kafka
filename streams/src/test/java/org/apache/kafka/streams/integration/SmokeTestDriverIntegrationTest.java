@@ -23,10 +23,9 @@ import org.apache.kafka.streams.integration.utils.EmbeddedKafkaCluster;
 import org.apache.kafka.streams.integration.utils.IntegrationTestUtils;
 import org.apache.kafka.streams.tests.SmokeTestClient;
 import org.apache.kafka.streams.tests.SmokeTestDriver;
-import org.apache.kafka.test.IntegrationTest;
-import org.junit.experimental.categories.Category;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -42,7 +41,7 @@ import static org.apache.kafka.streams.tests.SmokeTestDriver.verify;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(600)
-@Category(IntegrationTest.class)
+@Tag("integration")
 public class SmokeTestDriverIntegrationTest {
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(3);
 
