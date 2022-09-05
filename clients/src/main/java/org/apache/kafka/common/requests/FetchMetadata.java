@@ -114,9 +114,21 @@ public class FetchMetadata {
     }
 
     /**
-     * Return the metadata for the next error response.
+     * Return the metadata for the next request. The metadata is set to indicate that the client wants to close the
+     * existing session.
      */
     public FetchMetadata nextCloseExisting() {
+        return new FetchMetadata(sessionId, FINAL_EPOCH);
+    }
+
+    /**
+     * Return the metadata for the next request.
+     * As per KIP-227, Request.sessionId = $ID + Request.sessionEpoch = 0 means
+     *  Close the incremental fetch session identified by $ID.
+     *  Make a full FetchRequest.
+     *  Create a new incremental fetch session if possible.  If a new fetch session is created, it will start at epoch 1.
+     */
+    public FetchMetadata nextCloseExistingAttemptNew() {
         return new FetchMetadata(sessionId, INITIAL_EPOCH);
     }
 

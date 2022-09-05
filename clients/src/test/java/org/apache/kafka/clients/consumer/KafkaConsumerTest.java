@@ -150,6 +150,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+/**
+ * Note to future authors in this class. If you close the consumer, close with DURATION.ZERO to reduce the duration of the
+ * test.
+ */
 public class KafkaConsumerTest {
     private final String topic = "test";
     private final Uuid topicId = Uuid.randomUuid();
@@ -210,7 +214,7 @@ public class KafkaConsumerTest {
 
         assertEquals(consumer.getClientId(), mockMetricsReporter.clientId);
         assertEquals(2, consumer.metrics.reporters().size());
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -221,7 +225,7 @@ public class KafkaConsumerTest {
         props.setProperty(ConsumerConfig.AUTO_INCLUDE_JMX_REPORTER_CONFIG, "false");
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props, new StringDeserializer(), new StringDeserializer());
         assertTrue(consumer.metrics.reporters().isEmpty());
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -231,7 +235,7 @@ public class KafkaConsumerTest {
         props.setProperty(ConsumerConfig.METRIC_REPORTER_CLASSES_CONFIG, "org.apache.kafka.common.metrics.JmxReporter");
         KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props, new StringDeserializer(), new StringDeserializer());
         assertEquals(1, consumer.metrics.reporters().size());
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -244,7 +248,7 @@ public class KafkaConsumerTest {
         assertEquals(records.partitions(), Collections.singleton(tp0));
         assertEquals(records.records(tp0).size(), 5);
 
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -266,7 +270,7 @@ public class KafkaConsumerTest {
         assertEquals(invalidRecordOffset, rde.offset());
         assertEquals(tp0, rde.topicPartition());
         assertEquals(rde.offset(), consumer.position(tp0));
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     /*
@@ -335,7 +339,7 @@ public class KafkaConsumerTest {
         config.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, Selectable.USE_DEFAULT_BUFFER_SIZE);
         KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(
                 config, new ByteArrayDeserializer(), new ByteArrayDeserializer());
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -363,7 +367,7 @@ public class KafkaConsumerTest {
         config.put(ConsumerConfig.GROUP_INSTANCE_ID_CONFIG, "instance_id");
         KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(
                 config, new ByteArrayDeserializer(), new ByteArrayDeserializer());
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -386,45 +390,45 @@ public class KafkaConsumerTest {
         assertTrue(consumer.subscription().isEmpty());
         assertTrue(consumer.assignment().isEmpty());
 
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSubscriptionOnNullTopicCollection() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            assertThrows(IllegalArgumentException.class, () -> consumer.subscribe((List<String>) null));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        assertThrows(IllegalArgumentException.class, () -> consumer.subscribe((List<String>) null));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSubscriptionOnNullTopic() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            assertThrows(IllegalArgumentException.class, () -> consumer.subscribe(singletonList(null)));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        assertThrows(IllegalArgumentException.class, () -> consumer.subscribe(singletonList(null)));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSubscriptionOnEmptyTopic() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            String emptyTopic = "  ";
-            assertThrows(IllegalArgumentException.class, () -> consumer.subscribe(singletonList(emptyTopic)));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        String emptyTopic = "  ";
+        assertThrows(IllegalArgumentException.class, () -> consumer.subscribe(singletonList(emptyTopic)));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSubscriptionOnNullPattern() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            assertThrows(IllegalArgumentException.class,
-                () -> consumer.subscribe((Pattern) null));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        assertThrows(IllegalArgumentException.class,
+            () -> consumer.subscribe((Pattern) null));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSubscriptionOnEmptyPattern() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            assertThrows(IllegalArgumentException.class,
-                () -> consumer.subscribe(Pattern.compile("")));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        assertThrows(IllegalArgumentException.class,
+            () -> consumer.subscribe(Pattern.compile("")));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -433,49 +437,49 @@ public class KafkaConsumerTest {
         props.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9999");
         props.setProperty(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, "");
         props.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(props)) {
-            assertThrows(IllegalStateException.class,
-                () -> consumer.subscribe(singletonList(topic)));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(props);
+        assertThrows(IllegalStateException.class,
+            () -> consumer.subscribe(singletonList(topic)));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testSeekNegative() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            consumer.assign(singleton(new TopicPartition("nonExistTopic", 0)));
-            assertThrows(IllegalArgumentException.class,
-                () -> consumer.seek(new TopicPartition("nonExistTopic", 0), -1));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        consumer.assign(singleton(new TopicPartition("nonExistTopic", 0)));
+        assertThrows(IllegalArgumentException.class,
+            () -> consumer.seek(new TopicPartition("nonExistTopic", 0), -1));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testAssignOnNullTopicPartition() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            assertThrows(IllegalArgumentException.class, () -> consumer.assign(null));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        assertThrows(IllegalArgumentException.class, () -> consumer.assign(null));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testAssignOnEmptyTopicPartition() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            consumer.assign(Collections.emptyList());
-            assertTrue(consumer.subscription().isEmpty());
-            assertTrue(consumer.assignment().isEmpty());
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        consumer.assign(Collections.emptyList());
+        assertTrue(consumer.subscription().isEmpty());
+        assertTrue(consumer.assignment().isEmpty());
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testAssignOnNullTopicInPartition() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            assertThrows(IllegalArgumentException.class, () -> consumer.assign(singleton(new TopicPartition(null, 0))));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        assertThrows(IllegalArgumentException.class, () -> consumer.assign(singleton(new TopicPartition(null, 0))));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testAssignOnEmptyTopicInPartition() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            assertThrows(IllegalArgumentException.class, () -> consumer.assign(singleton(new TopicPartition("  ", 0))));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        assertThrows(IllegalArgumentException.class, () -> consumer.assign(singleton(new TopicPartition("  ", 0))));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -491,7 +495,7 @@ public class KafkaConsumerTest {
             assertEquals(1, MockConsumerInterceptor.INIT_COUNT.get());
             assertEquals(0, MockConsumerInterceptor.CLOSE_COUNT.get());
 
-            consumer.close();
+            consumer.close(Duration.ZERO);
             assertEquals(1, MockConsumerInterceptor.INIT_COUNT.get());
             assertEquals(1, MockConsumerInterceptor.CLOSE_COUNT.get());
             // Cluster metadata will only be updated on calling poll.
@@ -520,7 +524,7 @@ public class KafkaConsumerTest {
         consumer.unsubscribe();
         assertTrue(consumer.paused().isEmpty());
 
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -537,7 +541,7 @@ public class KafkaConsumerTest {
                 "grp1", "test metric");
         consumer.metrics.addMetric(testMetricName, new Avg());
         assertNotNull(server.getObjectInstance(new ObjectName("kafka.consumer:type=grp1,client-id=client-1")));
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     private KafkaConsumer<byte[], byte[]> newConsumer(String groupId) {
@@ -588,7 +592,7 @@ public class KafkaConsumerTest {
         consumer.updateAssignmentMetadataIfNeeded(time.timer(Long.MAX_VALUE));
 
         assertTrue(heartbeatReceived.get());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -686,7 +690,7 @@ public class KafkaConsumerTest {
         ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1));
         assertEquals(5, records.count());
         assertEquals(55L, consumer.position(tp0));
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -722,7 +726,7 @@ public class KafkaConsumerTest {
         // verify the offset is committed
         client.prepareResponse(offsetResponse(Collections.singletonMap(tp0, 55L), Errors.NONE));
         assertEquals(55, consumer.committed(Collections.singleton(tp0), Duration.ZERO).get(tp0).offset());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -898,7 +902,7 @@ public class KafkaConsumerTest {
         offsets.put(tp1, offset2);
         client.prepareResponseFrom(offsetResponse(offsets, Errors.NONE), coordinator);
         assertEquals(offset2, consumer.committed(Collections.singleton(tp1)).get(tp1).offset());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -963,7 +967,7 @@ public class KafkaConsumerTest {
         assertEquals(offset1, committed.get(tp0).offset());
         assertNull(committed.get(tp1));
 
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -995,7 +999,7 @@ public class KafkaConsumerTest {
         consumer.poll(Duration.ZERO);
 
         assertTrue(commitReceived.get());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1022,7 +1026,7 @@ public class KafkaConsumerTest {
 
         assertEquals(singleton(topic), consumer.subscription());
         assertEquals(singleton(tp0), consumer.assignment());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1258,7 +1262,7 @@ public class KafkaConsumerTest {
         assertTrue(consumer.assignment().isEmpty());
 
         client.requests().clear();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     /**
@@ -1320,7 +1324,7 @@ public class KafkaConsumerTest {
             assertNotSame(ApiKeys.OFFSET_COMMIT, req.requestBuilder().apiKey());
 
         client.requests().clear();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1416,7 +1420,7 @@ public class KafkaConsumerTest {
         client.prepareResponse(listOffsetsResponse(Collections.singletonMap(tp0, 10L)));
         client.prepareResponse(fetchResponse(tp0, 10L, 1));
 
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1));
+        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
         assertEquals(1, records.count());
         assertEquals(11L, consumer.position(tp0));
@@ -1433,7 +1437,7 @@ public class KafkaConsumerTest {
         assertTrue(commitReceived.get());
 
         client.requests().clear();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1488,7 +1492,7 @@ public class KafkaConsumerTest {
             assertNotSame(req.requestBuilder().apiKey(), ApiKeys.OFFSET_COMMIT);
 
         client.requests().clear();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1539,30 +1543,30 @@ public class KafkaConsumerTest {
 
         client.requests().clear();
         consumer.unsubscribe();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testPollWithNoSubscription() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testPollWithEmptySubscription() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            consumer.subscribe(Collections.emptyList());
-            assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        consumer.subscribe(Collections.emptyList());
+        assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
     public void testPollWithEmptyUserAssignment() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId)) {
-            consumer.assign(Collections.emptySet());
-            assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer(groupId);
+        consumer.assign(Collections.emptySet());
+        assertThrows(IllegalStateException.class, () -> consumer.poll(Duration.ZERO));
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1600,9 +1604,8 @@ public class KafkaConsumerTest {
     @Test
     public void testCloseShouldBeIdempotent() {
         KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
-        consumer.close();
-        consumer.close();
-        consumer.close();
+        consumer.close(Duration.ZERO);
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -1671,17 +1674,17 @@ public class KafkaConsumerTest {
     }
 
     @Test
-    public void testMetricConfigRecordingLevel() {
+    public void testMetricConfigRecordingLevelInfo() {
         Properties props = new Properties();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9000");
-        try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
-            assertEquals(Sensor.RecordingLevel.INFO, consumer.metrics.config().recordLevel());
-        }
+        KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(props, new ByteArrayDeserializer(), new ByteArrayDeserializer());
+        assertEquals(Sensor.RecordingLevel.INFO, consumer.metrics.config().recordLevel());
+        consumer.close(Duration.ZERO);
 
         props.put(ConsumerConfig.METRICS_RECORDING_LEVEL_CONFIG, "DEBUG");
-        try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(props, new ByteArrayDeserializer(), new ByteArrayDeserializer())) {
-            assertEquals(Sensor.RecordingLevel.DEBUG, consumer.metrics.config().recordLevel());
-        }
+        KafkaConsumer<byte[], byte[]> consumer2 = new KafkaConsumer<>(props, new ByteArrayDeserializer(), new ByteArrayDeserializer());
+        assertEquals(Sensor.RecordingLevel.DEBUG, consumer2.metrics.config().recordLevel());
+        consumer2.close(Duration.ZERO);
     }
 
     @Test
@@ -1747,7 +1750,7 @@ public class KafkaConsumerTest {
         consumer.updateAssignmentMetadataIfNeeded(time.timer(Long.MAX_VALUE));
         final ConsumerRecords<String, String> records = consumer.poll(Duration.ZERO);
         assertFalse(records.isEmpty());
-        consumer.close(Duration.ofMillis(0));
+        consumer.close(Duration.ZERO);
     }
 
     private void consumerCloseTest(final long closeTimeoutMs,
@@ -1826,7 +1829,7 @@ public class KafkaConsumerTest {
 
                 assertTrue(closeException.get() instanceof InterruptException, "Expected exception not thrown " + closeException);
             } else {
-                future.get(500, TimeUnit.MILLISECONDS); // Should succeed without TimeoutException or ExecutionException
+                future.get(closeTimeoutMs, TimeUnit.MILLISECONDS); // Should succeed without TimeoutException or ExecutionException
                 assertNull(closeException.get(), "Unexpected exception during close");
             }
         } finally {
@@ -2149,7 +2152,7 @@ public class KafkaConsumerTest {
 
         client.requests().clear();
         consumer.unsubscribe();
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -2810,10 +2813,10 @@ public class KafkaConsumerTest {
 
     @Test
     public void testEnforceRebalanceWithManualAssignment() {
-        try (KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null)) {
-            consumer.assign(singleton(new TopicPartition("topic", 0)));
-            assertThrows(IllegalStateException.class, consumer::enforceRebalance);
-        }
+        KafkaConsumer<byte[], byte[]> consumer = newConsumer((String) null);
+        consumer.assign(singleton(new TopicPartition("topic", 0)));
+        assertThrows(IllegalStateException.class, consumer::enforceRebalance);
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -2918,7 +2921,7 @@ public class KafkaConsumerTest {
         assertNotEquals(0, consumer.getClientId().length());
         assertEquals(3, CLIENT_IDS.size());
         CLIENT_IDS.forEach(id -> assertEquals(id, consumer.getClientId()));
-        consumer.close();
+        consumer.close(Duration.ZERO);
     }
 
     @Test
@@ -2930,9 +2933,9 @@ public class KafkaConsumerTest {
 
         assertTrue(config.unused().contains(SslConfigs.SSL_PROTOCOL_CONFIG));
 
-        try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(config, null, null)) {
-            assertTrue(config.unused().contains(SslConfigs.SSL_PROTOCOL_CONFIG));
-        }
+        KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(config, null, null);
+        assertTrue(config.unused().contains(SslConfigs.SSL_PROTOCOL_CONFIG));
+        consumer.close(Duration.ZERO);
     }
 
     @Test

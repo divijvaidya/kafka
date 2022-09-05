@@ -55,6 +55,7 @@ import org.apache.kafka.common.requests.MetadataRequest;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.utils.AppInfoParser;
 import org.apache.kafka.common.utils.LogContext;
+import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.common.utils.Timer;
 import org.apache.kafka.common.utils.Utils;
@@ -823,7 +824,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             // call close methods if internal objects are already constructed; this is to prevent resource leak. see KAFKA-2121
             // we do not need to call `close` at all when `log` is null, which means no internal objects were initialized.
             if (this.log != null) {
-                close(0, true);
+                close(Duration.ZERO, true);
             }
             // now propagate the exception
             throw new KafkaException("Failed to construct kafka consumer", t);
@@ -2375,7 +2376,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             if (!closed) {
                 // need to close before setting the flag since the close function
                 // itself may trigger rebalance callback that needs the consumer to be open still
-                close(timeout.toMillis(), false);
+                close(timeout, false);
             }
         } finally {
             closed = true;
@@ -2403,17 +2404,40 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         return clusterResourceListeners;
     }
 
-    private void close(long timeoutMs, boolean swallowException) {
+    private void close(Duration timeout, boolean swallowException) {
         log.trace("Closing the Kafka consumer");
         AtomicReference<Throwable> firstException = new AtomicReference<>();
-        try {
-            if (coordinator != null)
-                coordinator.close(time.timer(Math.min(timeoutMs, requestTimeoutMs)));
-        } catch (Throwable t) {
-            firstException.compareAndSet(null, t);
-            log.error("Failed to close coordinator", t);
+
+        final Timer closeTimer = (time == null) ? new SystemTime().timer(Math.min(timeout.toMillis(), requestTimeoutMs)) : time.timer(Math.min(timeout.toMillis(), requestTimeoutMs));
+        // Close objects with a timeout. The timeout is required because fetcher makes request to the server in the
+        // process of closing which may not respect the overall timeout defined for closing the consumer.
+        if (coordinator != null) {
+            try {
+                coordinator.close(closeTimer);
+            } catch (Throwable t) {
+                firstException.compareAndSet(null, t);
+                log.error("Failed to close consumer coordinator with type {}", coordinator.getClass().getName(), t);
+            }
         }
-        Utils.closeQuietly(fetcher, "fetcher", firstException);
+
+        if (fetcher != null) {
+            long remainingMs;
+            if (timeout.toMillis() > requestTimeoutMs)
+                remainingMs = timeout.toMillis() - closeTimer.elapsedMs();
+            else
+                remainingMs = closeTimer.remainingMs();
+
+            long fetcherTimeoutMs = Math.min(requestTimeoutMs, remainingMs);
+
+            try {
+                closeTimer.reset(fetcherTimeoutMs);
+                fetcher.close(closeTimer);
+            } catch (Throwable t) {
+                firstException.compareAndSet(null, t);
+                log.error("Failed to close fetcher with type {}", fetcher.getClass().getName(), t);
+            }
+        }
+
         Utils.closeQuietly(interceptors, "consumer interceptors", firstException);
         Utils.closeQuietly(kafkaConsumerMetrics, "kafka consumer metrics", firstException);
         Utils.closeQuietly(metrics, "consumer metrics", firstException);

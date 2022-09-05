@@ -90,12 +90,12 @@ public class ClientAuthenticationFailureTest {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "");
         StringDeserializer deserializer = new StringDeserializer();
 
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props, deserializer, deserializer)) {
-            assertThrows(SaslAuthenticationException.class, () -> {
-                consumer.subscribe(Collections.singleton(topic));
-                consumer.poll(Duration.ofSeconds(10));
-            });
-        }
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props, deserializer, deserializer);
+        assertThrows(SaslAuthenticationException.class, () -> {
+            consumer.subscribe(Collections.singleton(topic));
+            consumer.poll(Duration.ofSeconds(10));
+            consumer.close();
+        });
     }
 
     @Test
