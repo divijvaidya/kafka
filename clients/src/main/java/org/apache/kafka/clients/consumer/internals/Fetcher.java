@@ -1971,7 +1971,7 @@ public class Fetcher<K, V> implements Closeable {
         // all requests have received a response.
         do {
             client.poll(timer);
-        } while (timer.notExpired() && requestFutures.stream().allMatch(RequestFuture::isDone));
+        } while (timer.notExpired() && !requestFutures.stream().allMatch(RequestFuture::isDone));
 
         if (!requestFutures.stream().allMatch(RequestFuture::isDone)) {
             // we ran out of time before completing all futures. It is ok since we don't want to block the shutdown
