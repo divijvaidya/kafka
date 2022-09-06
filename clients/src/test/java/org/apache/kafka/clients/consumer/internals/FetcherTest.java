@@ -287,7 +287,7 @@ public class FetcherTest {
         fetcher.close();
         fetcher.close();
 
-        verify(fetcher, times(1)).closeFetchSessions(any(Timer.class));
+        verify(fetcher, times(1)).maybeCloseFetchSessions(any(Timer.class));
     }
 
     @Test

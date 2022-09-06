@@ -160,8 +160,8 @@ public class Fetcher<K, V> implements Closeable {
     private final Set<Integer> nodesWithPendingFetchRequests;
     private final ApiVersions apiVersions;
     private final AtomicInteger metadataUpdateVersion = new AtomicInteger(-1);
+    private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private CompletedFetch nextInLineFetch = null;
-    private AtomicBoolean isClosed = new AtomicBoolean(false);
 
     public Fetcher(LogContext logContext,
                    ConsumerNetworkClient client,
@@ -1942,7 +1942,7 @@ public class Fetcher<K, V> implements Closeable {
     }
 
     // Visible for testing
-    void closeFetchSessions(final Timer timer) {
+    void maybeCloseFetchSessions(final Timer timer) {
         final Cluster cluster = metadata.fetch();
         final List<RequestFuture<ClientResponse>> requestFutures = new ArrayList<>();
         for (final Map.Entry<Integer, FetchSessionHandler> entry : sessionHandlers.entrySet()) {
@@ -1950,7 +1950,14 @@ public class Fetcher<K, V> implements Closeable {
             // set the session handler to notify close. This will set the next metadata request to send close message.
             sessionHandler.notifyClose();
             final Integer fetchTargetNodeId = entry.getKey();
-            final RequestFuture<ClientResponse> responseFuture = sendFetchRequestToNode(sessionHandler.newBuilder().build(), cluster.nodeById(fetchTargetNodeId));
+
+            // Fet
+            final Node fetchTarget = cluster.nodeById(fetchTargetNodeId);
+            if (fetchTarget == null || client.isUnavailable(fetchTarget)) {
+                log.debug("Skip sending close session request to broker {} since it is not reachable", fetchTarget);
+                continue;
+            }
+            final RequestFuture<ClientResponse> responseFuture = sendFetchRequestToNode(sessionHandler.newBuilder().build(), fetchTarget);
             responseFuture.addListener(new RequestFutureListener<ClientResponse>() {
                 @Override
                 public void onSuccess(ClientResponse value) {
@@ -1970,7 +1977,7 @@ public class Fetcher<K, V> implements Closeable {
         // Poll to ensure that request has been written to the socket. Wait until either the timer has expired or until
         // all requests have received a response.
         do {
-            client.poll(timer);
+            client.poll(timer, null, true);
         } while (timer.notExpired() && !requestFutures.stream().allMatch(RequestFuture::isDone));
 
         if (!requestFutures.stream().allMatch(RequestFuture::isDone)) {
@@ -1990,13 +1997,15 @@ public class Fetcher<K, V> implements Closeable {
         // Shared states (e.g. sessionHandlers) could be accessed by multiple threads (such as heartbeat thread), hence,
         // it is necessary to acquire a lock on the fetcher instance before modifying the states.
         synchronized (Fetcher.this) {
+            // we do not need to re-enable wakeups since we are closing already
+            client.disableWakeups();
             if (nextInLineFetch != null)
                 nextInLineFetch.drain();
-            closeFetchSessions(timer);
+            maybeCloseFetchSessions(timer);
             Utils.closeQuietly(decompressionBufferSupplier, "decompressionBufferSupplier");
             sessionHandlers.clear();
-            this.isClosed.compareAndSet(false, true);
         }
+        this.isClosed.compareAndSet(false, true);
     }
 
     @Override
