@@ -1949,18 +1949,18 @@ public class Fetcher<K, V> implements Closeable {
             final FetchSessionHandler sessionHandler = entry.getValue();
             // set the session handler to notify close. This will set the next metadata request to send close message.
             sessionHandler.notifyClose();
-            final Integer nodeId = entry.getKey();
-            final RequestFuture<ClientResponse> responseFuture = sendFetchRequestToNode(sessionHandler.newBuilder().build(), cluster.nodeById(nodeId));
+            final Integer fetchTargetNodeId = entry.getKey();
+            final RequestFuture<ClientResponse> responseFuture = sendFetchRequestToNode(sessionHandler.newBuilder().build(), cluster.nodeById(fetchTargetNodeId));
             responseFuture.addListener(new RequestFutureListener<ClientResponse>() {
                 @Override
                 public void onSuccess(ClientResponse value) {
-                    log.info("Successfully sent a close message to {} for session {}", nodeId, sessionHandler.sessionId());
+                    log.info("Successfully sent a close message to {} for session {}", fetchTargetNodeId, sessionHandler.sessionId());
                 }
 
                 @Override
                 public void onFailure(RuntimeException e) {
                     log.warn("Unable to send a close message to {} for session {}. " +
-                        "This may result in unnecessary fetch sessions at the broker.", nodeId, sessionHandler.sessionId(), e);
+                        "This may result in unnecessary fetch sessions at the broker.", fetchTargetNodeId, sessionHandler.sessionId(), e);
                 }
             });
 

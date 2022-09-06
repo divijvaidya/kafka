@@ -1575,7 +1575,8 @@ public class KafkaConsumerTest {
         response.put(tp0, Errors.NONE);
         OffsetCommitResponse commitResponse = offsetCommitResponse(response);
         LeaveGroupResponse leaveGroupResponse = new LeaveGroupResponse(new LeaveGroupResponseData().setErrorCode(Errors.NONE.code()));
-        consumerCloseTest(5000, Arrays.asList(commitResponse, leaveGroupResponse), 0, false);
+        FetchResponse closeResponse = FetchResponse.of(Errors.NONE, 0, INVALID_SESSION_ID, new LinkedHashMap<>());
+        consumerCloseTest(5000, Arrays.asList(commitResponse, leaveGroupResponse, closeResponse), 0, false);
     }
 
     @Test
@@ -1801,15 +1802,28 @@ public class KafkaConsumerTest {
                 // Expected exception
             }
 
-            // Ensure close has started and queued at least one more request after commitAsync
+            // Ensure close has started and queued at least one more request after commitAsync.
+            //
+            // Close enqueues two requests, but second is enqueued only after first has succeeded. First is
+            // LEAVE_GROUP as part of coordinator close and second is FETCH with epoch=FINAL_EPOCH. At this stage
+            // we expect only the first one to have been requested. Hence, waiting for total 2 requests, one for
+            // commit and another for LEAVE_GROUP.
             client.waitForRequests(2, 1000);
 
             // In graceful mode, commit response results in close() completing immediately without a timeout
             // In non-graceful mode, close() times out without an exception even though commit response is pending
+            int nonCloseRequests = 1;
+            int lastRequest = responses.size() - 1;
             for (int i = 0; i < responses.size(); i++) {
                 client.waitForRequests(1, 1000);
-                client.respondFrom(responses.get(i), coordinator);
-                if (i != responses.size() - 1) {
+                if (i == lastRequest && responses.size() > 1) {
+                    // last request is the close session request which is sent to the leader of the partition.
+                    client.respondFrom(responses.get(i), node);
+                } else {
+                    client.respondFrom(responses.get(i), coordinator);
+                }
+                if (i < nonCloseRequests) {
+                    // the close request should not complete until non-close requests (commit requests) have completed.
                     try {
                         future.get(100, TimeUnit.MILLISECONDS);
                         fail("Close completed without waiting for response");
