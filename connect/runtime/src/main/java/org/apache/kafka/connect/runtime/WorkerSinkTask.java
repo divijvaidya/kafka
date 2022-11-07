@@ -86,8 +86,8 @@ class WorkerSinkTask extends WorkerTask {
     private final KafkaConsumer<byte[], byte[]> consumer;
     private WorkerSinkTaskContext context;
     private final List<SinkRecord> messageBatch;
-    private final Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets;
-    private final Map<TopicPartition, OffsetAndMetadata> currentOffsets;
+    final Map<TopicPartition, OffsetAndMetadata> lastCommittedOffsets;
+    final Map<TopicPartition, OffsetAndMetadata> currentOffsets;
     private final Map<TopicPartition, OffsetAndMetadata> origOffsets;
     private RuntimeException rebalanceException;
     private long nextCommit;
