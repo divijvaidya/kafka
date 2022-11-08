@@ -347,38 +347,22 @@ public class WorkerSinkTaskTest {
     public void testPollRedelivery() {
         createTask(initialState);
 
-        prepareStubForInitializeTask();
         prepareStubForTaskGetTopic();
-        OngoingStubbing<ConsumerRecords<byte[], byte[]>> consumerPollStub = expectPollInitialAssignment();
 
-        // If a retriable exception is thrown, we should redeliver the same batch, pausing the consumer in the meantime
-        expectConsumerPoll(1, consumerPollStub);
-        // Retry delivery should succeed
-        expectConsumerPoll(0, consumerPollStub);
-        expectConversionAndTransformation(1);
-        doThrow(new RetriableException("retry")).doNothing().when(sinkTask).put(anyCollection());
-        // Pause
-
-        // And unpause
-
-        // Expect commit
-        final Map<TopicPartition, OffsetAndMetadata> workerCurrentOffsets = new HashMap<>();
-        // Commit advance by one
-        workerCurrentOffsets.put(TOPIC_PARTITION, new OffsetAndMetadata(FIRST_OFFSET + 1));
-        // Nothing polled for this partition
-        workerCurrentOffsets.put(TOPIC_PARTITION2, new OffsetAndMetadata(FIRST_OFFSET));
-        when(sinkTask.preCommit(workerCurrentOffsets)).thenReturn(workerCurrentOffsets);
-        doAnswer(invocation -> {
-            assertEquals(2, invocation.getArguments().length);
-            ((OffsetCommitCallback) (invocation.getArgument(1))).onComplete(workerCurrentOffsets, null);
-            return null;
-        }).when(consumer).commitAsync(eq(workerCurrentOffsets), any(OffsetCommitCallback.class));
-        
+        // actual call
         workerTask.initialize(TASK_CONFIG);
         workerTask.initializeAndStart();
+
+        // verification of method invocation
+        verifyInitializeTask();
+
+        OngoingStubbing<ConsumerRecords<byte[], byte[]>> consumerPollStub = expectPollInitialAssignment();
+
+        // actual call
         workerTask.iteration();
         time.sleep(10000L);
 
+        // assertion of results
         assertSinkMetricValue("partition-count", 2);
         assertSinkMetricValue("sink-record-read-total", 0.0);
         assertSinkMetricValue("sink-record-send-total", 0.0);
@@ -399,6 +383,66 @@ public class WorkerSinkTaskTest {
         assertTaskMetricValue("offset-commit-failure-percentage", 0.0);
         assertTaskMetricValue("offset-commit-success-percentage", 0.0);
 
+        // If a retriable exception is thrown, we should redeliver the same batch, pausing the consumer in the meantime
+        expectConsumerPoll(1, null);
+        expectConversionAndTransformation(1);
+        doThrow(new RetriableException("retry")).doNothing().when(sinkTask).put(anyCollection());
+
+        // actual call
+        workerTask.iteration();
+
+        // verification of invocation
+        verify(sinkTask).put(Collections.emptyList());
+        verify(consumer).pause(INITIAL_ASSIGNMENT);
+
+        // CASE: Unpause
+        // Retry delivery should succeed
+        expectConsumerPoll(0, null);
+
+        // actual call
+        workerTask.iteration();
+
+        // verification of invocation
+        INITIAL_ASSIGNMENT.forEach(tp -> {
+            verify(consumer).resume(singleton(tp));
+        });
+        verify(sinkTask).put(Collections.emptyList());
+
+        // assertion of results
+        assertSinkMetricValue("partition-count", 2);
+        assertSinkMetricValue("sink-record-read-total", 0.0);
+        assertSinkMetricValue("sink-record-send-total", 0.0);
+        assertSinkMetricValue("sink-record-active-count", 0.0);
+        assertSinkMetricValue("sink-record-active-count-max", 0.0);
+        assertSinkMetricValue("sink-record-active-count-avg", 0.0);
+        assertSinkMetricValue("offset-commit-seq-no", 0.0);
+        assertSinkMetricValue("offset-commit-completion-rate", 0.0);
+        assertSinkMetricValue("offset-commit-completion-total", 0.0);
+        assertSinkMetricValue("offset-commit-skip-rate", 0.0);
+        assertSinkMetricValue("offset-commit-skip-total", 0.0);
+        assertTaskMetricValue("status", "running");
+        assertTaskMetricValue("running-ratio", 1.0);
+        assertTaskMetricValue("pause-ratio", 0.0);
+        assertTaskMetricValue("batch-size-max", 0.0);
+        assertTaskMetricValue("batch-size-avg", 0.0);
+        assertTaskMetricValue("offset-commit-max-time-ms", Double.NaN);
+        assertTaskMetricValue("offset-commit-failure-percentage", 0.0);
+        assertTaskMetricValue("offset-commit-success-percentage", 0.0);
+
+        // Expect commit
+        final Map<TopicPartition, OffsetAndMetadata> workerCurrentOffsets = new HashMap<>();
+        // Commit advance by one
+        workerCurrentOffsets.put(TOPIC_PARTITION, new OffsetAndMetadata(FIRST_OFFSET + 1));
+        // Nothing polled for this partition
+        workerCurrentOffsets.put(TOPIC_PARTITION2, new OffsetAndMetadata(FIRST_OFFSET));
+        when(sinkTask.preCommit(workerCurrentOffsets)).thenReturn(workerCurrentOffsets);
+        doAnswer(invocation -> {
+            assertEquals(2, invocation.getArguments().length);
+            ((OffsetCommitCallback) (invocation.getArgument(1))).onComplete(workerCurrentOffsets, null);
+            return null;
+        }).when(consumer).commitAsync(eq(workerCurrentOffsets), any(OffsetCommitCallback.class));
+        
+
         workerTask.iteration();
         workerTask.iteration();
         time.sleep(30000L);
@@ -418,12 +462,9 @@ public class WorkerSinkTaskTest {
         workerTask.iteration();
 
         assertSinkMetricValue("offset-commit-completion-total", 1.0);
-        INITIAL_ASSIGNMENT.forEach(tp -> {
-            verify(consumer).resume(singleton(tp));
-        });
-        verify(consumer).pause(INITIAL_ASSIGNMENT);
+
+
         verify(consumer.assignment(), times(3));
-        verifyInitializeTask();
         verifySinkTaskInvocations(1, 3, 0, 0);
     }
 
