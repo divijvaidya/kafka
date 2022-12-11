@@ -16,6 +16,8 @@
  */
 package org.apache.kafka.common.utils;
 
+import org.apache.kafka.common.protocol.ByteBufferAccessor;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -153,6 +155,35 @@ public final class ByteUtils {
         return value;
     }
 
+    public static int readUnsignedVarintNetty(ByteBuffer buffer) {
+        byte tmp = buffer.get();
+        if (tmp >= 0) {
+            return tmp;
+        } else {
+            int result = tmp & 127;
+            if ((tmp = buffer.get()) >= 0) {
+                result |= tmp << 7;
+            } else {
+                result |= (tmp & 127) << 7;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= tmp << 14;
+                } else {
+                    result |= (tmp & 127) << 14;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= tmp << 21;
+                    } else {
+                        result |= (tmp & 127) << 21;
+                        result |= (tmp = buffer.get()) << 28;
+                        if (tmp < 0) {
+                            throw new IllegalArgumentException("malformed varint.");
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
     /**
      * Read an integer stored in variable-length format using unsigned decoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>.
@@ -188,7 +219,7 @@ public final class ByteUtils {
      */
     public static int readVarint(ByteBuffer buffer) {
         int value = readUnsignedVarint(buffer);
-        return (value >>> 1) ^ -(value & 1);
+        return decodeZigZag32(value);
     }
 
     /**
@@ -203,7 +234,7 @@ public final class ByteUtils {
      */
     public static int readVarint(DataInput in) throws IOException {
         int value = readUnsignedVarint(in);
-        return (value >>> 1) ^ -(value & 1);
+        return decodeZigZag32(value);
     }
 
     /**
@@ -227,7 +258,7 @@ public final class ByteUtils {
                 throw illegalVarlongException(value);
         }
         value |= b << i;
-        return (value >>> 1) ^ -(value & 1);
+        return decodeZigZag64(value);
     }
 
     /**
@@ -250,7 +281,7 @@ public final class ByteUtils {
                 throw illegalVarlongException(value);
         }
         value |= b << i;
-        return (value >>> 1) ^ -(value & 1);
+        return decodeZigZag64(value);
     }
 
     /**
@@ -281,13 +312,24 @@ public final class ByteUtils {
      * @param value The value to write
      * @param buffer The output to write to
      */
-    public static void writeUnsignedVarint(int value, ByteBuffer buffer) {
+    public static void writeUnsignedVarint(int value, ByteBuffer buf) {
+        return;
+    }
+
+    public static void writeUnsignedVarint(int value, ByteBufferAccessor out) {
         while ((value & 0xffffff80) != 0L) {
             byte b = (byte) ((value & 0x7f) | 0x80);
-            buffer.put(b);
+            out.writeByte(b);
             value >>>= 7;
         }
-        buffer.put((byte) value);
+        out.writeByte((byte) value);
+    }
+
+    public static void writeUnsignedVarintNew(int value, ByteBufferAccessor buf) {
+        int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
+            | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
+        buf.writeInt(w);
+        buf.writeByte((byte) (value >>> 28));
     }
 
     /**
@@ -307,6 +349,13 @@ public final class ByteUtils {
         out.writeByte((byte) value);
     }
 
+    public static void writeUnsignedVarintNew(int value, DataOutput buf) throws IOException {
+        int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
+            | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
+        buf.writeInt(w);
+        buf.writeByte(value >>> 28);
+    }
+
     /**
      * Write the given integer following the variable-length zig-zag encoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
@@ -316,7 +365,7 @@ public final class ByteUtils {
      * @param out The output to write to
      */
     public static void writeVarint(int value, DataOutput out) throws IOException {
-        writeUnsignedVarint((value << 1) ^ (value >> 31), out);
+        writeUnsignedVarint(encodeZigZag32(value), out);
     }
 
     /**
@@ -328,7 +377,7 @@ public final class ByteUtils {
      * @param buffer The output to write to
      */
     public static void writeVarint(int value, ByteBuffer buffer) {
-        writeUnsignedVarint((value << 1) ^ (value >> 31), buffer);
+        writeUnsignedVarint(encodeZigZag32(value), buffer);
     }
 
     /**
@@ -340,7 +389,7 @@ public final class ByteUtils {
      * @param out The output to write to
      */
     public static void writeVarlong(long value, DataOutput out) throws IOException {
-        long v = (value << 1) ^ (value >> 63);
+        long v = encodeZigZag64(value);
         while ((v & 0xffffffffffffff80L) != 0L) {
             out.writeByte(((int) v & 0x7f) | 0x80);
             v >>>= 7;
@@ -357,7 +406,7 @@ public final class ByteUtils {
      * @param buffer The buffer to write to
      */
     public static void writeVarlong(long value, ByteBuffer buffer) {
-        long v = (value << 1) ^ (value >> 63);
+        long v = encodeZigZag64(value);
         while ((v & 0xffffffffffffff80L) != 0L) {
             byte b = (byte) ((v & 0x7f) | 0x80);
             buffer.put(b);
@@ -411,6 +460,22 @@ public final class ByteUtils {
         return leadingZerosBelow38DividedBy7 + (leadingZeros >>> 5);
     }
 
+    public static int sizeOfUnsignedVarintNetty(int value) {
+        if ((value & (0xffffffff <<  7)) == 0) {
+            return 1;
+        }
+        if ((value & (0xffffffff << 14)) == 0) {
+            return 2;
+        }
+        if ((value & (0xffffffff << 21)) == 0) {
+            return 3;
+        }
+        if ((value & (0xffffffff << 28)) == 0) {
+            return 4;
+        }
+        return 5;
+    }
+
     /**
      * Number of bytes needed to encode an integer in variable-length format.
      *
@@ -427,7 +492,7 @@ public final class ByteUtils {
      * @see #sizeOfUnsignedVarint(int)
      */
     public static int sizeOfVarlong(long value) {
-        long v = (value << 1) ^ (value >> 63);
+        long v = encodeZigZag64(value);
 
         // For implementation notes @see #sizeOfUnsignedVarint(int)
         // Similar logic is applied to allow for 64bit input -> 1-9byte output.
@@ -446,5 +511,61 @@ public final class ByteUtils {
     private static IllegalArgumentException illegalVarlongException(long value) {
         throw new IllegalArgumentException("Varlong is too long, most significant bit in the 10th byte is set, " +
                 "converted value: " + Long.toHexString(value));
+    }
+
+    /**
+     * This code is copied from https://github.com/protocolbuffers/protobuf/blob/main/java/core/src/main/java/com/google/protobuf/CodedOutputStream.java
+     *
+     * Encode a ZigZag-encoded 32-bit value. ZigZag encodes signed integers into values that can be
+     * efficiently encoded with varint. (Otherwise, negative values must be sign-extended to 64 bits
+     * to be varint encoded, thus always taking 10 bytes on the wire.)
+     *
+     * @param n A signed 32-bit integer.
+     * @return An unsigned 32-bit integer, stored in a signed int because Java has no explicit
+     *     unsigned support.
+     */
+    private static int encodeZigZag32(final int n) {
+        // Note:  the right-shift must be arithmetic
+        return (n << 1) ^ (n >> 31);
+    }
+
+    /**
+     * Encode a ZigZag-encoded 64-bit value. ZigZag encodes signed integers into values that can be
+     * efficiently encoded with varint. (Otherwise, negative values must be sign-extended to 64 bits
+     * to be varint encoded, thus always taking 10 bytes on the wire.)
+     *
+     * @param n A signed 64-bit integer.
+     * @return An unsigned 64-bit integer, stored in a signed int because Java has no explicit
+     *     unsigned support.
+     */
+    private static long encodeZigZag64(final long n) {
+        // Note:  the right-shift must be arithmetic
+        return (n << 1) ^ (n >> 63);
+    }
+
+    /**
+     * Decode a ZigZag-encoded 32-bit value. ZigZag encodes signed integers into values that can be
+     * efficiently encoded with varint. (Otherwise, negative values must be sign-extended to 64 bits
+     * to be varint encoded, thus always taking 10 bytes on the wire.)
+     *
+     * @param n An unsigned 32-bit integer, stored in a signed int because Java has no explicit
+     *     unsigned support.
+     * @return A signed 32-bit integer.
+     */
+    public static int decodeZigZag32(final int n) {
+        return (n >>> 1) ^ -(n & 1);
+    }
+
+    /**
+     * Decode a ZigZag-encoded 64-bit value. ZigZag encodes signed integers into values that can be
+     * efficiently encoded with varint. (Otherwise, negative values must be sign-extended to 64 bits
+     * to be varint encoded, thus always taking 10 bytes on the wire.)
+     *
+     * @param n An unsigned 64-bit integer, stored in a signed int because Java has no explicit
+     *     unsigned support.
+     * @return A signed 64-bit integer.
+     */
+    public static long decodeZigZag64(final long n) {
+        return (n >>> 1) ^ -(n & 1);
     }
 }
