@@ -280,6 +280,47 @@ class ControllerIntegrationTest extends ZooKeeperTestHarness {
     TestUtils.waitForPartitionMetadata(Seq(servers(controllerId)), tp1.topic, tp1.partition)
   }
 
+  /**
+   * This tests a scenario where client < 2.8 are used to increase the partitions for a topic by directly modifying
+   * assignment at Zk. This direct modification overwrites existing topicIds and replaces them with empty.
+   *
+   * This test verifies that the topicId in Zk is rebuilt by the controller as long as controller failover doesn't
+   * happen. We currently don't handle the scenario when controller failover occurs between Zk overwriting the topicId
+   * and controller updating it with it's locally stored value.
+   */
+  @Test
+  def testTopicPartitionExpansionWithOlderClients(): Unit = {
+    val tp0 = new TopicPartition("t", 0)
+    val tp1 = new TopicPartition("t", 1)
+    val initialAssignment = Map(tp0.partition -> Seq(0))
+    val expandedAssignment = Map(
+      tp0 -> ReplicaAssignment(Seq(0), Seq(), Seq()),
+      tp1 -> ReplicaAssignment(Seq(0), Seq(), Seq()))
+
+    servers = makeServers(1)
+
+    TestUtils.createTopic(zkClient, tp0.topic, partitionReplicaAssignment = initialAssignment, servers = servers)
+    val topicIdAfterCreate = zkClient.getTopicIdsForTopics(Set(tp0.topic())).get(tp0.topic())
+    val topicIdStoredByController = servers.head.kafkaController.controllerContext.topicIds.get(tp0.topic)
+
+    // Note that topic ID for the topic should be non-empty
+    assertTrue(topicIdAfterCreate.nonEmpty)
+    assertEquals(topicIdAfterCreate, topicIdStoredByController, "topic ID stored in Zk does not match with topicID in controller")
+
+    // This mimics a TopicCommand.ZookeeperTopicService# call from a client <2.8 which passes an empty value for topicId.
+    zkClient.setTopicAssignment(tp0.topic, /*empty topic Id*/ Option.empty, expandedAssignment, firstControllerEpochZkVersion)
+
+    waitForPartitionState(tp1, firstControllerEpoch, 0, LeaderAndIsr.initialLeaderEpoch,
+      "failed to get expected partition state upon topic partition expansion")
+
+    // verify that the topic Id stored in Zk after the expansion is same as the one which was assigned on topic creation
+    val topicIdAfterPartitionExpansion = zkClient.getTopicIdsForTopics(Set(tp0.topic())).get(tp0.topic())
+    assertTrue(topicIdAfterPartitionExpansion.nonEmpty)
+    assertEquals(topicIdAfterCreate, topicIdAfterPartitionExpansion, "TopicId has changed for the topic after partition expansion")
+
+    TestUtils.waitForPartitionMetadata(servers, tp1.topic, tp1.partition)
+  }
+
   @Test
   def testPartitionReassignment(): Unit = {
     servers = makeServers(2)
@@ -1059,7 +1100,6 @@ class ControllerIntegrationTest extends ZooKeeperTestHarness {
     TestUtils.waitUntilTrue(() => !servers.head.kafkaController.controllerContext.allTopics.contains(tp.topic),
       "topic should have been removed from controller context after deletion")
   }
-
   @Test
   def testTopicIdUpgradeAfterReassigningPartitions(): Unit = {
     val tp = new TopicPartition("t", 0)

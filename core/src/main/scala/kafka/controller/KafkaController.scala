@@ -1658,11 +1658,12 @@ class KafkaController(val config: KafkaConfig,
   }
 
   private def processTopicIds(topicIdAssignments: Set[TopicIdReplicaAssignment]): Unit = {
-    // Create topic IDs for topics missing them if we are using topic IDs
+    // Create topic IDs or update with locally stored topicIDs for topics missing them if we are using topic IDs
     // Otherwise, maintain what we have in the topicZNode
     val updatedTopicIdAssignments = if (config.usesTopicId) {
       val (withTopicIds, withoutTopicIds) = topicIdAssignments.partition(_.topicId.isDefined)
-      withTopicIds ++ zkClient.setTopicIds(withoutTopicIds, controllerContext.epochZkVersion)
+      val topicIdsForZkUpdate = withoutTopicIds.collect(t => TopicIdReplicaAssignment(t.topic, controllerContext.topicIds.get(t.topic), t.assignment))
+      withTopicIds ++ zkClient.setTopicIds(topicIdsForZkUpdate, controllerContext.epochZkVersion)
     } else {
       topicIdAssignments
     }
@@ -1676,7 +1677,6 @@ class KafkaController(val config: KafkaConfig,
       }
     }
   }
-
   private def processLogDirEventNotification(): Unit = {
     if (!isActive) return
     val sequenceNumbers = zkClient.getAllLogDirEventNotifications
@@ -1710,7 +1710,8 @@ class KafkaController(val config: KafkaConfig,
     }
 
     if (!isActive) return
-    val partitionReplicaAssignment = zkClient.getFullReplicaAssignmentForTopics(immutable.Set(topic))
+    val partitions = zkClient.getReplicaAssignmentAndTopicIdForTopics(immutable.Set(topic))
+    val partitionReplicaAssignment = partitions.map(_.assignment).head
     val partitionsToBeAdded = partitionReplicaAssignment.filter { case (topicPartition, _) =>
       controllerContext.partitionReplicaAssignment(topicPartition).isEmpty
     }
@@ -1727,6 +1728,7 @@ class KafkaController(val config: KafkaConfig,
       }
     } else if (partitionsToBeAdded.nonEmpty) {
       info(s"New partitions to be added $partitionsToBeAdded")
+      processTopicIds(partitions)
       partitionsToBeAdded.forKeyValue { (topicPartition, assignedReplicas) =>
         controllerContext.updatePartitionFullReplicaAssignment(topicPartition, assignedReplicas)
       }
