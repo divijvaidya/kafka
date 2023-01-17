@@ -23,10 +23,10 @@ import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.BufferSupplier;
+import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -69,7 +69,7 @@ public class ZstdFactory {
 
             // Set output buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
             // in cases where the caller reads a small number of bytes (potentially a single byte).
-            return new DataInputStream(new ZstdInputStreamNoFinalizer(new ByteArrayInputStream(buffer.array()), bufferPool));
+            return new DataInputStream(new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer), bufferPool));
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
