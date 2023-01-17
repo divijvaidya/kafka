@@ -77,6 +77,6 @@ public class ZstdFactory {
 
     public static int getRecommendedDOutBufferSize() {
         final long recommendedSize = ZstdInputStreamNoFinalizer.recommendedDOutSize();
-        return recommendedSize > Integer.MAX_VALUE ? (int) recommendedSize : Integer.MAX_VALUE;
+        return recommendedSize > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) recommendedSize;
     }
 }
