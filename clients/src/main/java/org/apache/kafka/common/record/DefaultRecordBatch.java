@@ -284,7 +284,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         if (skipKeyValue) {
             int recommendedSize = compressionType().getRecommendedDOutBufferSize();
             // this buffer is used to skip length delimited fields like key, value, headers
-            byte[] skipArray = new byte[recommendedSize == 0 ? MAX_SKIP_BUFFER_SIZE : recommendedSize];
+            byte[] skipArray = bufferSupplier.get(recommendedSize == 0 ? MAX_SKIP_BUFFER_SIZE : recommendedSize).array();
 
             return new StreamRecordIterator(inputStream) {
                 @Override
