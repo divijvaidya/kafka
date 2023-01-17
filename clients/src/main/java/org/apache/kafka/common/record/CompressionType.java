@@ -47,6 +47,11 @@ public enum CompressionType {
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return new ByteBufferInputStream(buffer);
         }
+
+        @Override
+        public int getRecommendedDOutBufferSize() {
+            return 0;
+        }
     },
 
     // Shipped with the JDK
@@ -75,6 +80,11 @@ public enum CompressionType {
                 throw new KafkaException(e);
             }
         }
+
+        @Override
+        public int getRecommendedDOutBufferSize() {
+            return 0;
+        }
     },
 
     // We should only load classes from a given compression library when we actually use said compression library. This
@@ -92,6 +102,11 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return SnappyFactory.wrapForInput(buffer);
+        }
+
+        @Override
+        public int getRecommendedDOutBufferSize() {
+            return 0;
         }
     },
 
@@ -114,6 +129,11 @@ public enum CompressionType {
                 throw new KafkaException(e);
             }
         }
+
+        @Override
+        public int getRecommendedDOutBufferSize() {
+            return 0;
+        }
     },
 
     ZSTD(4, "zstd", 1.0f) {
@@ -125,6 +145,11 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return ZstdFactory.wrapForInput(buffer, messageVersion, decompressionBufferSupplier);
+        }
+
+        @Override
+        public int getRecommendedDOutBufferSize() {
+            return ZstdFactory.getRecommendedDOutBufferSize();
         }
     };
 
@@ -158,6 +183,8 @@ public enum CompressionType {
      *                                    performance impact.
      */
     public abstract InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier);
+
+    public abstract int getRecommendedDOutBufferSize();
 
     public static CompressionType forId(int id) {
         switch (id) {

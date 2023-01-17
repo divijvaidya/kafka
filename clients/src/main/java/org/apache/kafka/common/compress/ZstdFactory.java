@@ -23,16 +23,20 @@ import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.BufferSupplier;
-import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class ZstdFactory {
+    /**
+     * Default compression level
+     */
+    private static final int DEFAULT_COMPRESSION_LEVEL = 3;
 
     private ZstdFactory() { }
 
@@ -40,7 +44,7 @@ public class ZstdFactory {
         try {
             // Set input buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
             // in cases where the caller passes a small number of bytes to write (potentially a single byte).
-            return new BufferedOutputStream(new ZstdOutputStreamNoFinalizer(buffer, RecyclingBufferPool.INSTANCE), 16 * 1024);
+            return new BufferedOutputStream(new ZstdOutputStreamNoFinalizer(buffer, RecyclingBufferPool.INSTANCE).setLevel(DEFAULT_COMPRESSION_LEVEL), 16 * 1024);
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
@@ -49,7 +53,8 @@ public class ZstdFactory {
     public static InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
         try {
             // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
-            // implementation doesn't require locking or soft references.
+            // implementation doesn't require locking or soft references. This buffer pool is used by zstd-jni for
+            // reading compressed data. Buffer to store decompressed data is provided by
             BufferPool bufferPool = new BufferPool() {
                 @Override
                 public ByteBuffer get(int capacity) {
@@ -64,10 +69,14 @@ public class ZstdFactory {
 
             // Set output buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
             // in cases where the caller reads a small number of bytes (potentially a single byte).
-            return new BufferedInputStream(new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer),
-                bufferPool), 16 * 1024);
+            return new DataInputStream(new ZstdInputStreamNoFinalizer(new ByteArrayInputStream(buffer.array()), bufferPool));
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
+    }
+
+    public static int getRecommendedDOutBufferSize() {
+        final long recommendedSize = ZstdInputStreamNoFinalizer.recommendedDOutSize();
+        return recommendedSize > Integer.MAX_VALUE ? (int) recommendedSize : Integer.MAX_VALUE;
     }
 }

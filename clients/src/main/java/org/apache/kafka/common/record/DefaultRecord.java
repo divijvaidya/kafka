@@ -404,6 +404,7 @@ public class DefaultRecord implements Record {
                 DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
                 RecordBatch.NO_SEQUENCE;
 
+            // TODO - if this is the last message, you don't need to skip (since skipping may decompress). Just end processing here.
             // first skip key
             int keySize = skipLengthDelimitedField(skipBuffer, input, bytesRemaining);
 

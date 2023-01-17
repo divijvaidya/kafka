@@ -29,6 +29,7 @@ import org.apache.kafka.common.utils.Crc32C;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -273,15 +274,17 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     public DataInputStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
-        return new DataInputStream(compressionType().wrapForInput(buffer, magic(), bufferSupplier));
+        final InputStream decompressedStream = compressionType().wrapForInput(buffer, magic(), bufferSupplier);
+        return decompressedStream instanceof DataInputStream ? (DataInputStream) decompressedStream : new DataInputStream(decompressedStream);
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
         final DataInputStream inputStream = recordInputStream(bufferSupplier);
 
         if (skipKeyValue) {
+            int recommendedSize = compressionType().getRecommendedDOutBufferSize();
             // this buffer is used to skip length delimited fields like key, value, headers
-            byte[] skipArray = new byte[MAX_SKIP_BUFFER_SIZE];
+            byte[] skipArray = new byte[recommendedSize == 0 ? MAX_SKIP_BUFFER_SIZE : recommendedSize];
 
             return new StreamRecordIterator(inputStream) {
                 @Override
