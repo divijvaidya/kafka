@@ -29,6 +29,7 @@ import org.apache.kafka.common.utils.Crc32C;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -273,7 +274,8 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     public DataInputStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
-        return new DataInputStream(compressionType().wrapForInput(buffer, magic(), bufferSupplier));
+        final InputStream decompressedStream = compressionType().wrapForInput(buffer, magic(), bufferSupplier);
+        return decompressedStream instanceof DataInputStream ? (DataInputStream) decompressedStream : new DataInputStream(decompressedStream);
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
@@ -281,12 +283,23 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
         if (skipKeyValue) {
             // this buffer is used to skip length delimited fields like key, value, headers
-            byte[] skipArray = new byte[MAX_SKIP_BUFFER_SIZE];
+            final ByteBuffer skipBuffer = bufferSupplier.get(MAX_SKIP_BUFFER_SIZE);
 
             return new StreamRecordIterator(inputStream) {
                 @Override
                 protected Record doReadRecord(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) throws IOException {
-                    return DefaultRecord.readPartiallyFrom(inputStream, skipArray, baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                    return DefaultRecord.readPartiallyFrom(inputStream, skipBuffer.array(), baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                }
+
+                @Override
+                public void close() {
+                    try {
+                        inputStream.close();
+                    } catch (IOException e) {
+                        throw new KafkaException("Failed to close record stream", e);
+                    } finally {
+                        bufferSupplier.release(skipBuffer);
+                    }
                 }
             };
         } else {

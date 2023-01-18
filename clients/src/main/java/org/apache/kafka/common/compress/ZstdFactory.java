@@ -26,13 +26,17 @@ import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class ZstdFactory {
+    /**
+     * Default compression level
+     */
+    private static final int DEFAULT_COMPRESSION_LEVEL = 3;
 
     private ZstdFactory() { }
 
@@ -40,7 +44,7 @@ public class ZstdFactory {
         try {
             // Set input buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
             // in cases where the caller passes a small number of bytes to write (potentially a single byte).
-            return new BufferedOutputStream(new ZstdOutputStreamNoFinalizer(buffer, RecyclingBufferPool.INSTANCE), 16 * 1024);
+            return new BufferedOutputStream(new ZstdOutputStreamNoFinalizer(buffer, RecyclingBufferPool.INSTANCE).setLevel(DEFAULT_COMPRESSION_LEVEL), 16 * 1024);
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
@@ -49,7 +53,9 @@ public class ZstdFactory {
     public static InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
         try {
             // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
-            // implementation doesn't require locking or soft references.
+            // implementation doesn't require locking or soft references. The buffer allocated by this buffer pool is
+            // used by zstd-jni for 1\ reading compressed data from input stream into a buffer before passing it over JNI
+            // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call.
             BufferPool bufferPool = new BufferPool() {
                 @Override
                 public ByteBuffer get(int capacity) {
@@ -62,10 +68,11 @@ public class ZstdFactory {
                 }
             };
 
-            // Set output buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
-            // in cases where the caller reads a small number of bytes (potentially a single byte).
-            return new BufferedInputStream(new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer),
-                bufferPool), 16 * 1024);
+            // We do not use an intermediate buffer to store the decompressed data as a result of JNI read() calls using
+            // `ZstdInputStreamNoFinalizer` here. Every read() call to `DataInputStream` will be a JNI call and the
+            // caller is expected to balance the tradeoff between reading large amount of data vs. making multiple JNI
+            // calls.
+            return new DataInputStream(new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer), bufferPool));
         } catch (Throwable e) {
             throw new KafkaException(e);
         }

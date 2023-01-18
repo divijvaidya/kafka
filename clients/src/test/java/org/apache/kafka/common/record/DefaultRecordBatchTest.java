@@ -25,6 +25,8 @@ import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -354,10 +356,11 @@ public class DefaultRecordBatchTest {
         assertEquals(marker, EndTransactionMarker.deserialize(commitRecord));
     }
 
-    @Test
-    public void testStreamingIteratorConsistency() {
+    @ParameterizedTest
+    @EnumSource(value = CompressionType.class)
+    public void testStreamingIteratorConsistency(CompressionType compressionType) {
         MemoryRecords records = MemoryRecords.withRecords(RecordBatch.MAGIC_VALUE_V2, 0L,
-                CompressionType.GZIP, TimestampType.CREATE_TIME,
+                compressionType, TimestampType.CREATE_TIME,
                 new SimpleRecord(1L, "a".getBytes(), "1".getBytes()),
                 new SimpleRecord(2L, "b".getBytes(), "2".getBytes()),
                 new SimpleRecord(3L, "c".getBytes(), "3".getBytes()));
@@ -367,12 +370,13 @@ public class DefaultRecordBatchTest {
         }
     }
 
-    @Test
-    public void testSkipKeyValueIteratorCorrectness() {
+    @ParameterizedTest
+    @EnumSource(value = CompressionType.class, names = {"NONE"}, mode = EnumSource.Mode.EXCLUDE)
+    public void testSkipKeyValueIteratorCorrectness(CompressionType compressionType) {
         Header[] headers = {new RecordHeader("k1", "v1".getBytes()), new RecordHeader("k2", "v2".getBytes())};
 
         MemoryRecords records = MemoryRecords.withRecords(RecordBatch.MAGIC_VALUE_V2, 0L,
-            CompressionType.LZ4, TimestampType.CREATE_TIME,
+            compressionType, TimestampType.CREATE_TIME,
             new SimpleRecord(1L, "a".getBytes(), "1".getBytes()),
             new SimpleRecord(2L, "b".getBytes(), "2".getBytes()),
             new SimpleRecord(3L, "c".getBytes(), "3".getBytes()),
