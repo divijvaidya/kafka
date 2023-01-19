@@ -25,8 +25,8 @@ import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -47,6 +47,11 @@ public enum CompressionType {
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return new ByteBufferInputStream(buffer);
         }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 2 * 1024; // 2KB
+        }
     },
 
     // Shipped with the JDK
@@ -66,14 +71,17 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
-                // Set output buffer (uncompressed) to 16 KB (none by default) and input buffer (compressed) to
-                // 8 KB (0.5 KB by default) to ensure reasonable performance in cases where the caller reads a small
-                // number of bytes (potentially a single byte)
-                return new BufferedInputStream(new GZIPInputStream(new ByteBufferInputStream(buffer), 8 * 1024),
-                        16 * 1024);
+                // Set input buffer (compressed) to 8 KB (0.5 KB by default) to ensure reasonable performance in cases
+                // where the caller reads a small number of bytes (potentially a single byte)
+                return new DataInputStream(new GZIPInputStream(new ByteBufferInputStream(buffer), 8 * 1024));
             } catch (Exception e) {
                 throw new KafkaException(e);
             }
+        }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 16 * 1024; // 16KB
         }
     },
 
@@ -92,6 +100,11 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return SnappyFactory.wrapForInput(buffer);
+        }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 2 * 1024; // 2KB
         }
     },
 
@@ -114,6 +127,11 @@ public enum CompressionType {
                 throw new KafkaException(e);
             }
         }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 2 * 1024; // 2KB
+        }
     },
 
     ZSTD(4, "zstd", 1.0f) {
@@ -125,6 +143,11 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return ZstdFactory.wrapForInput(buffer, messageVersion, decompressionBufferSupplier);
+        }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 16 * 1024; // 16KB
         }
     };
 
@@ -158,6 +181,11 @@ public enum CompressionType {
      *                                    performance impact.
      */
     public abstract InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier);
+
+    /**
+     * Provided recommended size of buffer for storing decompression output.
+     */
+    public abstract int getRecommendedDOutSize();
 
     public static CompressionType forId(int id) {
         switch (id) {
