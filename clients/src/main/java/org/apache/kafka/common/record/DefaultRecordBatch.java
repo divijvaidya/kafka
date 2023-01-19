@@ -135,8 +135,6 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     private static final byte DELETE_HORIZON_FLAG_MASK = 0x40;
     private static final byte TIMESTAMP_TYPE_MASK = 0x08;
 
-    private static final int MAX_SKIP_BUFFER_SIZE = 2048;
-
     private final ByteBuffer buffer;
 
     DefaultRecordBatch(ByteBuffer buffer) {
@@ -283,7 +281,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
         if (skipKeyValue) {
             // this buffer is used to skip length delimited fields like key, value, headers
-            final ByteBuffer skipBuffer = bufferSupplier.get(MAX_SKIP_BUFFER_SIZE);
+            final ByteBuffer skipBuffer = bufferSupplier.get(compressionType().getRecommendedDOutSize());
 
             return new StreamRecordIterator(inputStream) {
                 @Override
