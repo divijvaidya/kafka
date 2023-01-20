@@ -147,7 +147,7 @@ public enum CompressionType {
 
         @Override
         public int getRecommendedDOutSize() {
-            return 16 * 1024; // 16KB
+            return ZstdFactory.getRecommendedDOutSize();
         }
     };
 

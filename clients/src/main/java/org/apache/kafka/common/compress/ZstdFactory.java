@@ -77,4 +77,9 @@ public class ZstdFactory {
             throw new KafkaException(e);
         }
     }
+
+    public static int getRecommendedDOutSize() {
+        long recommendedSize = ZstdInputStreamNoFinalizer.recommendedDOutSize();
+        return recommendedSize > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) recommendedSize;
+    }
 }
