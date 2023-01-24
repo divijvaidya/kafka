@@ -1638,6 +1638,7 @@ class KafkaController(val config: KafkaConfig,
     controllerContext.setAllTopics(topics)
 
     registerPartitionModificationsHandlers(newTopics.toSeq)
+    // TODO - diviv - this is called when topic Id is created, we can use
     val addedPartitionReplicaAssignment = zkClient.getReplicaAssignmentAndTopicIdForTopics(newTopics)
     deletedTopics.foreach(controllerContext.removeTopic)
     processTopicIds(addedPartitionReplicaAssignment)

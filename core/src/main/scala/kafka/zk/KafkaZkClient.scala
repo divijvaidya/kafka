@@ -489,6 +489,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
    */
   def setTopicIds(topicIdReplicaAssignments: collection.Set[TopicIdReplicaAssignment],
                   expectedControllerEpochZkVersion: Int): Set[TopicIdReplicaAssignment] = {
+    // TODO diviv - set topic IDs in new topicIDs znode as well.
     val updatedAssignments = topicIdReplicaAssignments.map {
       case TopicIdReplicaAssignment(topic, None, assignments) =>
         TopicIdReplicaAssignment(topic, Some(Uuid.randomUuid()), assignments)
@@ -611,6 +612,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
    * @return the Topic IDs
    */
   def getTopicIdsForTopics(topics: Set[String]): Map[String, Uuid] = {
+    // TODO diviv - Overwrite this method to get topicIDs from new topicIDs znode
     val getDataRequests = topics.map(topic => GetDataRequest(TopicZNode.path(topic), ctx = Some(topic)))
     val getDataResponses = retryRequestsUntilConnected(getDataRequests.toSeq)
     getDataResponses.map { getDataResponse =>
@@ -642,6 +644,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
    * @return the TopicIdReplicaAssignment for each partition for the given topics.
    */
   def getReplicaAssignmentAndTopicIdForTopics(topics: Set[String]): Set[TopicIdReplicaAssignment] = {
+    // TODO - diviv - make another call to new topicIDs Znode to get topic IDs
     val getDataRequests = topics.map(topic => GetDataRequest(TopicZNode.path(topic), ctx = Some(topic)))
     val getDataResponses = retryRequestsUntilConnected(getDataRequests.toSeq)
     getDataResponses.map { getDataResponse =>
@@ -660,6 +663,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
     * @return the full replica assignment for each partition from the given topics.
     */
   def getFullReplicaAssignmentForTopics(topics: Set[String]): Map[TopicPartition, ReplicaAssignment] = {
+    // TODO - diviv - update the data with topic ID
     val getDataRequests = topics.map(topic => GetDataRequest(TopicZNode.path(topic), ctx = Some(topic)))
     val getDataResponses = retryRequestsUntilConnected(getDataRequests.toSeq)
     getDataResponses.flatMap { getDataResponse =>
@@ -678,6 +682,7 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
    * @return the partition assignment for each partition from the given topics.
    */
   def getPartitionAssignmentForTopics(topics: Set[String]): Map[String, Map[Int, ReplicaAssignment]] = {
+    // TODO - diviv - update the data with topic ID
     val getDataRequests = topics.map(topic => GetDataRequest(TopicZNode.path(topic), ctx = Some(topic)))
     val getDataResponses = retryRequestsUntilConnected(getDataRequests.toSeq)
     getDataResponses.flatMap { getDataResponse =>

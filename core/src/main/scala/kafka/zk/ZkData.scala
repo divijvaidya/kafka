@@ -50,6 +50,17 @@ import scala.collection.{Map, Seq, immutable, mutable}
 import scala.util.{Failure, Success, Try}
 
 // This file contains objects for encoding/decoding data stored in ZooKeeper nodes (znodes).
+object MyZNode {
+  def path = "/my"
+}
+
+object TopicIdsZNode {
+  def path = s"${MyZNode.path}/topicIds"
+}
+
+object TopicIdPath {
+  def path(topic: String, topicId:String) = s"${TopicIdsZNode.path}/$topic/$topicId"
+}
 
 object ControllerZNode {
   def path = "/controller"
