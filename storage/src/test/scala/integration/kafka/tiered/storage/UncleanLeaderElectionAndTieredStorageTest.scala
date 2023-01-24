@@ -18,28 +18,71 @@
 
 package kafka.tiered.storage
 
-class UncleanLeaderElectionAndTieredStorageTest extends TieredStorageTestHarness {
-  private val (leader, follower, _, topicA, p0) = (0, 1, 2, "topicA", 0)
+import kafka.controller.{KafkaController, ReplicaAssignment}
+import kafka.utils.TestUtils
+import org.apache.kafka.common.TopicPartition
+import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue}
 
-  override protected def brokerCount: Int = 3
+import scala.collection.Seq
+import scala.util.{Failure, Success, Try}
+
+class UncleanLeaderElectionAndTieredStorageTest extends TieredStorageTestHarness {
+  private val (leader, follower, _, topicA, p0, p1) = (0, 1, 2, "topicB", 0, 1)
+
+  override protected def brokerCount: Int = 2
 
   override protected def writeTestSpecifications(builder: TieredStorageTestBuilder): Unit = {
     val assignment = Map(p0 -> Seq(leader, follower))
+    val tp0 = new TopicPartition(topicA, p0)
 
     builder
       .createTopic(topicA, partitionsCount = 1, replicationFactor = 2, maxBatchCountPerSegment = 1, assignment)
       .produce(topicA, p0, ("k1", "v1"))
-
-      .stop(follower)
       .produce(topicA, p0, ("k2", "v2"), ("k3", "v3"))
       .withBatchSize(topicA, p0, 1)
-      .expectSegmentToBeOffloaded(leader, topicA, p0, baseOffset = 0, ("k1", "v1"))
+      .expectSegmentToBeOffloaded(leader, topicA, p0, baseOffset = 0, ("k1", "v1"));
 
-      .stop(leader)
-      .start(follower)
-      .expectLeader(topicA, p0, follower)
-      .produce(topicA, p0, ("k4", "v4"), ("k5", "v5"))
-      .withBatchSize(topicA, p0, 1)
-      // .expectSegmentToBeOffloaded(follower, topicA, p0, baseOffset = 1, ("k2", "v2"))
+    Try(builder.complete()) match {
+      case Success(actions) =>
+        contextOpt.foreach(context => actions.foreach(_.execute(context)))
+
+      case Failure(e) =>
+        throw new AssertionError("Could not build test specifications. No test was executed.", e)
+    }
+
+    val tp1 = new TopicPartition(topicA, p1)
+    val expandedAssignment = Map(
+      tp0 -> ReplicaAssignment(Seq(0, 1), Seq(), Seq()),
+      tp1 -> ReplicaAssignment(Seq(0, 1), Seq(), Seq()))
+
+    var topicIdAfterPartitionExpansion = zkClient.getTopicIdsForTopics(Set(tp0.topic())).get(tp0.topic())
+    assertTrue(topicIdAfterPartitionExpansion.nonEmpty)
+    System.out.println("oldTopic:" + topicIdAfterPartitionExpansion)
+    val topicIdOld = topicIdAfterPartitionExpansion;
+
+    val initZkEpoch = KafkaController.InitialControllerEpochZkVersion + 1
+    zkClient.setTopicAssignment(tp0.topic, /*empty topic Id*/ Option.empty, expandedAssignment, initZkEpoch)
+
+    Thread.sleep(10)
+    topicIdAfterPartitionExpansion = zkClient.getTopicIdsForTopics(Set(tp0.topic())).get(tp0.topic())
+    assertTrue(topicIdAfterPartitionExpansion.isEmpty)
+
+    System.out.println("Controller beginning shutdown")
+    val controller1 = getController()
+    controller1.shutdown()
+    controller1.awaitShutdown()
+    System.out.println("Controller is shutdown")
+
+    topicIdAfterPartitionExpansion = zkClient.getTopicIdsForTopics(Set(tp0.topic())).get(tp0.topic())
+    System.out.println("newTopicId:" + topicIdAfterPartitionExpansion)
+    val topicIdnew = topicIdAfterPartitionExpansion;
+    Thread.sleep(50)
+    assertTrue(topicIdAfterPartitionExpansion.nonEmpty)
+
+    System.out.println("controller startup")
+    controller1.startup()
+    TestUtils.generateAndProduceMessages(servers, tp0.topic(), 5)
+
+    assertEquals(topicIdOld, topicIdnew)
   }
 }

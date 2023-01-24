@@ -1658,6 +1658,7 @@ class KafkaController(val config: KafkaConfig,
   }
 
   private def processTopicIds(topicIdAssignments: Set[TopicIdReplicaAssignment]): Unit = {
+    System.out.println("inside processTopicIds:" + topicIdAssignments)
     // Create topic IDs for topics missing them if we are using topic IDs
     // Otherwise, maintain what we have in the topicZNode
     val updatedTopicIdAssignments = if (config.usesTopicId) {

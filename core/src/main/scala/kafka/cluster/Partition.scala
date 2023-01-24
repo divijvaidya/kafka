@@ -440,19 +440,26 @@ class Partition(val topicPartition: TopicPartition,
     // If the request had an invalid topic ID, then we assume that topic IDs are not supported.
     // The topic ID was not inconsistent, so return true.
     // If the log is empty, then we can not say that topic ID is inconsistent, so return true.
-    if (requestTopicId == null || requestTopicId == Uuid.ZERO_UUID)
+    if (requestTopicId == null || requestTopicId == Uuid.ZERO_UUID) {
+      System.out.println("inside checkOrSetTopicId-requestTopicId empty ")
       true
-    else {
+    } else {
       log match {
-        case None => true
+        case None => {
+          System.out.println("inside checkOrSetTopicId-log empty ")
+          true
+        }
         case Some(log) => {
           // Check if topic ID is in memory, if not, it must be new to the broker and does not have a metadata file.
           // This is because if the broker previously wrote it to file, it would be recovered on restart after failure.
           // Topic ID is consistent since we are just setting it here.
           if (log.topicId == Uuid.ZERO_UUID) {
+            System.out.println(s"mehbey - TopicName ${log.topicPartition.topic()} and TopicId: ${log.topicId} ")
+            System.out.println("inside checkOrSetTopicId-assignTopicId" + requestTopicId)
             log.assignTopicId(requestTopicId)
             true
           } else if (log.topicId != requestTopicId) {
+            System.out.println("inside checkOrSetTopicId-mismatch" + requestTopicId + " " + log.topicId)
             stateChangeLogger.error(s"Topic Id in memory: ${log.topicId} does not" +
               s" match the topic Id for partition $topicPartition provided in the request: " +
               s"$requestTopicId.")

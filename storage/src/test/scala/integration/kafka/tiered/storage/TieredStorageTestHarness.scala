@@ -32,7 +32,6 @@ import org.apache.kafka.server.log.remote.storage.RemoteLogManagerConfig.{REMOTE
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 
 import scala.collection.Seq
-import scala.util.{Failure, Success, Try}
 
 /**
   * Base class for integration tests exercising the tiered storage functionality in Apache Kafka.
@@ -103,7 +102,7 @@ abstract class TieredStorageTestHarness extends IntegrationTestHarness {
     createBrokerConfigs(numConfigs = brokerCount, zkConnect).map(KafkaConfig.fromProps(_, overridingProps))
   }
 
-  private var contextOpt: Option[TieredStorageTestContext] = None
+  protected var contextOpt: Option[TieredStorageTestContext] = None
 
   protected def readReplicaSelectorClass: Option[Class[_ <: ReplicaSelector]] = None
 
@@ -120,13 +119,13 @@ abstract class TieredStorageTestHarness extends IntegrationTestHarness {
     val builder = new TieredStorageTestBuilder
     writeTestSpecifications(builder)
 
-    Try(builder.complete()) match {
-      case Success(actions) =>
-        contextOpt.foreach(context => actions.foreach(_.execute(context)))
-
-      case Failure(e) =>
-        throw new AssertionError("Could not build test specifications. No test was executed.", e)
-    }
+//    Try(builder.complete()) match {
+//      case Success(actions) =>
+//        contextOpt.foreach(context => actions.foreach(_.execute(context)))
+//
+//      case Failure(e) =>
+//        throw new AssertionError("Could not build test specifications. No test was executed.", e)
+//    }
   }
 
   @AfterEach

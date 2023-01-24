@@ -246,10 +246,11 @@ class RemoteLogManager(fetchLog: TopicPartition => Option[Log],
     }
 
     def cacheTopicPartitionIds(topicIdPartition: TopicIdPartition): Unit = {
+      System.out.println("cacheTopicPartitionIds " + topicIdPartition)
       val maybePreviousTopicId = topicPartitionIds.put(topicIdPartition.topicPartition(), topicIdPartition.topicId())
       maybePreviousTopicId.filter(_ != topicIdPartition.topicId())
         .foreach { previousTopicId =>
-          warn(s"Previous cached topic id $previousTopicId for ${topicIdPartition.topicPartition()} does " +
+          System.out.println(s"Previous cached topic id $previousTopicId for ${topicIdPartition.topicPartition()} does " +
             s"not match update topic id ${topicIdPartition.topicId()}")
         }
     }

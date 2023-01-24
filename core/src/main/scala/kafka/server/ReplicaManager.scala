@@ -1594,6 +1594,7 @@ class ReplicaManager(val config: KafkaConfig,
           replicaFetcherManager.shutdownIdleFetcherThreads()
           replicaAlterLogDirsManager.shutdownIdleFetcherThreads()
 
+          System.out.println("calling rlm.leadershipchange from replica manager")
           remoteLogManager.foreach(rlm => rlm.onLeadershipChange(partitionsBecomeLeader, partitionsBecomeFollower, topicIds))
 
           onLeadershipChange(partitionsBecomeLeader, partitionsBecomeFollower)
