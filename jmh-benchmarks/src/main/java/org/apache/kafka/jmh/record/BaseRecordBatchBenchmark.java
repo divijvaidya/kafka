@@ -28,10 +28,7 @@ import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.server.log.internals.LogValidator;
-import org.openjdk.jmh.annotations.Param;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.*;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -66,7 +63,7 @@ public abstract class BaseRecordBatchBenchmark {
     private Bytes bytes = Bytes.RANDOM;
 
     @Param(value = {"NO_CACHING", "CREATE"})
-    private String bufferSupplierStr = "NO_CACHING";
+    String bufferSupplierStr = "NO_CACHING";
 
     // zero starting offset is much faster for v1 batches, but that will almost never happen
     int startingOffset;
@@ -101,6 +98,12 @@ public abstract class BaseRecordBatchBenchmark {
             int size = random.nextInt(maxBatchSize) + 1;
             batchBuffers[i] = createBatch(size);
         }
+    }
+
+    @TearDown
+    public void cleanUp() {
+        if (requestLocal != null)
+            requestLocal.close();
     }
 
     private static Header[] createHeaders() {

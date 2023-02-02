@@ -21,6 +21,7 @@ import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MutableRecordBatch;
 import org.apache.kafka.common.record.Record;
 import org.apache.kafka.common.record.RecordBatch;
+import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Fork;
@@ -48,21 +49,9 @@ public class RecordBatchIterationBenchmark extends BaseRecordBatchBenchmark {
 
     @Benchmark
     public void measureIteratorForBatchWithSingleMessage(Blackhole bh) {
-        for (RecordBatch batch : MemoryRecords.readableRecords(singleBatchBuffer.duplicate()).batches()) {
-            try (CloseableIterator<Record> iterator = batch.streamingIterator(requestLocal.bufferSupplier())) {
-                while (iterator.hasNext())
-                    bh.consume(iterator.next());
-            }
-        }
-    }
-
-    @OperationsPerInvocation(value = batchCount)
-    @Fork(jvmArgsAppend = "-Xmx8g")
-    @Benchmark
-    public void measureStreamingIteratorForVariableBatchSize(Blackhole bh) {
-        for (int i = 0; i < batchCount; ++i) {
-            for (RecordBatch batch : MemoryRecords.readableRecords(batchBuffers[i].duplicate()).batches()) {
-                try (CloseableIterator<Record> iterator = batch.streamingIterator(requestLocal.bufferSupplier())) {
+        try(final BufferSupplier bufferSupplier = bufferSupplierStr.equals("CREATE") ? BufferSupplier.create() : BufferSupplier.NO_CACHING) {
+            for (RecordBatch batch : MemoryRecords.readableRecords(singleBatchBuffer.duplicate()).batches()) {
+                try (CloseableIterator<Record> iterator = batch.streamingIterator(bufferSupplier)) {
                     while (iterator.hasNext())
                         bh.consume(iterator.next());
                 }
@@ -73,12 +62,30 @@ public class RecordBatchIterationBenchmark extends BaseRecordBatchBenchmark {
     @OperationsPerInvocation(value = batchCount)
     @Fork(jvmArgsAppend = "-Xmx8g")
     @Benchmark
+    public void measureStreamingIteratorForVariableBatchSize(Blackhole bh) {
+        try(final BufferSupplier bufferSupplier = bufferSupplierStr.equals("CREATE") ? BufferSupplier.create() : BufferSupplier.NO_CACHING) {
+            for (int i = 0; i < batchCount; ++i) {
+                for (RecordBatch batch : MemoryRecords.readableRecords(batchBuffers[i].duplicate()).batches()) {
+                    try (CloseableIterator<Record> iterator = batch.streamingIterator(bufferSupplier)) {
+                        while (iterator.hasNext())
+                            bh.consume(iterator.next());
+                    }
+                }
+            }
+        }
+    }
+
+    @OperationsPerInvocation(value = batchCount)
+    @Fork(jvmArgsAppend = "-Xmx8g")
+    @Benchmark
     public void measureSkipIteratorForVariableBatchSize(Blackhole bh) {
-        for (int i = 0; i < batchCount; ++i) {
-            for (MutableRecordBatch batch : MemoryRecords.readableRecords(batchBuffers[i].duplicate()).batches()) {
-                try (CloseableIterator<Record> iterator = batch.skipKeyValueIterator(requestLocal.bufferSupplier())) {
-                    while (iterator.hasNext())
-                        bh.consume(iterator.next());
+        try(final BufferSupplier bufferSupplier = bufferSupplierStr.equals("CREATE") ? BufferSupplier.create() : BufferSupplier.NO_CACHING) {
+            for (int i = 0; i < batchCount; ++i) {
+                for (MutableRecordBatch batch : MemoryRecords.readableRecords(batchBuffers[i].duplicate()).batches()) {
+                    try (CloseableIterator<Record> iterator = batch.skipKeyValueIterator(bufferSupplier)) {
+                        while (iterator.hasNext())
+                            bh.consume(iterator.next());
+                    }
                 }
             }
         }
