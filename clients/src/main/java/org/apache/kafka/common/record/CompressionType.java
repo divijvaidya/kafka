@@ -24,8 +24,8 @@ import org.apache.kafka.common.compress.ZstdFactory;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
+import org.apache.kafka.common.utils.ChunkedDataInputStream;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -66,14 +66,17 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
-                // Set output buffer (uncompressed) to 16 KB (none by default) and input buffer (compressed) to
-                // 8 KB (0.5 KB by default) to ensure reasonable performance in cases where the caller reads a small
-                // number of bytes (potentially a single byte)
-                return new BufferedInputStream(new GZIPInputStream(new ByteBufferInputStream(buffer), 8 * 1024),
-                        16 * 1024);
+                // Set input buffer (compressed) to 8 KB (0.5 KB by default) to ensure reasonable performance in cases
+                // where the caller reads a small number of bytes (potentially a single byte)
+                return new ChunkedDataInputStream(new GZIPInputStream(new ByteBufferInputStream(buffer), 8 * 1024), decompressionBufferSupplier, getRecommendedDOutSize());
             } catch (Exception e) {
                 throw new KafkaException(e);
             }
+        }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return 16 * 1024; // 16KB
         }
     },
 
@@ -126,6 +129,11 @@ public enum CompressionType {
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return ZstdFactory.wrapForInput(buffer, messageVersion, decompressionBufferSupplier);
         }
+
+        @Override
+        public int getRecommendedDOutSize() {
+            return ZstdFactory.getRecommendedDOutSize();
+        }
     };
 
     public final int id;
@@ -158,6 +166,13 @@ public enum CompressionType {
      *                                    performance impact.
      */
     public abstract InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier);
+
+    /**
+     * Recommended size of buffer for storing decompressed output.
+     */
+    public int getRecommendedDOutSize() {
+        throw new UnsupportedOperationException("Size of decompression buffer is not defined for this compression type=" + this.name);
+    }
 
     public static CompressionType forId(int id) {
         switch (id) {

@@ -25,15 +25,15 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
+import org.apache.kafka.common.utils.ChunkedDataInputStream;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class ZstdFactory {
-
     private ZstdFactory() { }
 
     public static OutputStream wrapForOutput(ByteBufferOutputStream buffer) {
@@ -49,25 +49,41 @@ public class ZstdFactory {
     public static InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
         try {
             // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
-            // implementation doesn't require locking or soft references.
-            BufferPool bufferPool = new BufferPool() {
-                @Override
-                public ByteBuffer get(int capacity) {
-                    return decompressionBufferSupplier.get(capacity);
-                }
-
-                @Override
-                public void release(ByteBuffer buffer) {
-                    decompressionBufferSupplier.release(buffer);
-                }
-            };
-
-            // Set output buffer (uncompressed) to 16 KB (none by default) to ensure reasonable performance
-            // in cases where the caller reads a small number of bytes (potentially a single byte).
-            return new BufferedInputStream(new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer),
-                bufferPool), 16 * 1024);
+            // implementation doesn't require locking or soft references. The buffer allocated by this buffer pool is
+            // used by zstd-jni for 1\ reading compressed data from input stream into a buffer before passing it over JNI
+            // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call.
+            // We do not use an intermediate buffer to store the decompressed data as a result of JNI read() calls using
+            // `ZstdInputStreamNoFinalizer` here. Every read() call to `ZstdInputStreamNoFinalizer` will be a JNI call
+            // and the caller is expected to balance the tradeoff between reading large amount of data vs. making
+            // multiple JNI calls.
+            return new ChunkedDataInputStream(getZstdStream(buffer, decompressionBufferSupplier), decompressionBufferSupplier, getRecommendedDOutSize());
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
+    }
+
+    public static InputStream getZstdStream(final ByteBuffer compressedBuf, BufferSupplier decompressionBufferSupplier) throws IOException {
+        BufferPool bufferPool = new BufferPool() {
+            @Override
+            public ByteBuffer get(int capacity) {
+                return decompressionBufferSupplier.get(capacity);
+            }
+
+            @Override
+            public void release(ByteBuffer buffer) {
+                decompressionBufferSupplier.release(buffer);
+            }
+        };
+        return new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(compressedBuf), bufferPool);
+    }
+
+    public static int getRecommendedDOutSize() {
+        /**
+         * Size of intermediate buffer which contains uncompressed data.
+         * This size should be <= ZSTD_BLOCKSIZE_MAX
+         *
+         * see: https://github.com/facebook/zstd/blob/dev/lib/zstd.h#L849
+         */
+        return 16 * 1024; // 16 KB
     }
 }

@@ -16,6 +16,7 @@
  */
 package org.apache.kafka.common.utils;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
@@ -27,6 +28,11 @@ public final class ByteBufferInputStream extends InputStream {
 
     public ByteBufferInputStream(ByteBuffer buffer) {
         this.buffer = buffer;
+    }
+
+    @Override
+    public int available() throws IOException {
+        return buffer.remaining();
     }
 
     public int read() {

@@ -20,12 +20,11 @@ import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.PrimitiveRef;
-import org.apache.kafka.common.utils.PrimitiveRef.IntRef;
 import org.apache.kafka.common.utils.Utils;
 
 import java.io.DataInput;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -363,7 +362,6 @@ public class DefaultRecord implements Record {
     }
 
     public static PartialDefaultRecord readPartiallyFrom(DataInput input,
-                                                         byte[] skipArray,
                                                          long baseOffset,
                                                          long baseTimestamp,
                                                          int baseSequence,
@@ -371,61 +369,54 @@ public class DefaultRecord implements Record {
         int sizeOfBodyInBytes = ByteUtils.readVarint(input);
         int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
 
-        return readPartiallyFrom(input, skipArray, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
+        return readPartiallyFrom(input, totalSizeInBytes, baseOffset, baseTimestamp,
             baseSequence, logAppendTime);
     }
 
     private static PartialDefaultRecord readPartiallyFrom(DataInput input,
-                                                          byte[] skipArray,
                                                           int sizeInBytes,
-                                                          int sizeOfBodyInBytes,
                                                           long baseOffset,
                                                           long baseTimestamp,
                                                           int baseSequence,
                                                           Long logAppendTime) throws IOException {
-        ByteBuffer skipBuffer = ByteBuffer.wrap(skipArray);
-        // set its limit to 0 to indicate no bytes readable yet
-        skipBuffer.limit(0);
-
         try {
             // reading the attributes / timestamp / offset and key-size does not require
             // any byte array allocation and therefore we can just read them straight-forwardly
-            IntRef bytesRemaining = PrimitiveRef.ofInt(sizeOfBodyInBytes);
-
-            byte attributes = readByte(skipBuffer, input, bytesRemaining);
-            long timestampDelta = readVarLong(skipBuffer, input, bytesRemaining);
+            byte attributes = input.readByte();
+            long timestampDelta = ByteUtils.readVarlong(input);
             long timestamp = baseTimestamp + timestampDelta;
             if (logAppendTime != null)
                 timestamp = logAppendTime;
 
-            int offsetDelta = readVarInt(skipBuffer, input, bytesRemaining);
+            int offsetDelta = ByteUtils.readVarint(input);
             long offset = baseOffset + offsetDelta;
             int sequence = baseSequence >= 0 ?
                 DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
                 RecordBatch.NO_SEQUENCE;
 
             // first skip key
-            int keySize = skipLengthDelimitedField(skipBuffer, input, bytesRemaining);
+            int keySize = ByteUtils.readVarint(input);
+            // key could be null
+            skipBytes(input, keySize);
 
             // then skip value
-            int valueSize = skipLengthDelimitedField(skipBuffer, input, bytesRemaining);
+            int valueSize = ByteUtils.readVarint(input);
+            skipBytes(input, valueSize);
 
             // then skip header
-            int numHeaders = readVarInt(skipBuffer, input, bytesRemaining);
+            int numHeaders = ByteUtils.readVarint(input);
             if (numHeaders < 0)
                 throw new InvalidRecordException("Found invalid number of record headers " + numHeaders);
             for (int i = 0; i < numHeaders; i++) {
-                int headerKeySize = skipLengthDelimitedField(skipBuffer, input, bytesRemaining);
+                int headerKeySize = ByteUtils.readVarint(input);
                 if (headerKeySize < 0)
                     throw new InvalidRecordException("Invalid negative header key size " + headerKeySize);
+                skipBytes(input, headerKeySize);
 
                 // headerValueSize
-                skipLengthDelimitedField(skipBuffer, input, bytesRemaining);
+                int headerValueSize = ByteUtils.readVarint(input);
+                skipBytes(input, headerValueSize);
             }
-
-            if (bytesRemaining.value > 0 || skipBuffer.remaining() > 0)
-                throw new InvalidRecordException("Invalid record size: expected to read " + sizeOfBodyInBytes +
-                    " bytes in record payload, but there are still bytes remaining");
 
             return new PartialDefaultRecord(sizeInBytes, attributes, offset, timestamp, sequence, keySize, valueSize);
         } catch (BufferUnderflowException | IllegalArgumentException e) {
@@ -433,87 +424,17 @@ public class DefaultRecord implements Record {
         }
     }
 
-    private static byte readByte(ByteBuffer buffer, DataInput input, IntRef bytesRemaining) throws IOException {
-        if (buffer.remaining() < 1 && bytesRemaining.value > 0) {
-            readMore(buffer, input, bytesRemaining);
-        }
 
-        return buffer.get();
-    }
+    /**
+     * Skips n bytes from
+     */
+    private static void skipBytes(DataInput in, int n) throws IOException {
+        if (n <= 0) return;
 
-    private static long readVarLong(ByteBuffer buffer, DataInput input, IntRef bytesRemaining) throws IOException {
-        if (buffer.remaining() < 10 && bytesRemaining.value > 0) {
-            readMore(buffer, input, bytesRemaining);
-        }
+        long skippedBytes = in.skipBytes(n);
 
-        return ByteUtils.readVarlong(buffer);
-    }
-
-    private static int readVarInt(ByteBuffer buffer, DataInput input, IntRef bytesRemaining) throws IOException {
-        if (buffer.remaining() < 5 && bytesRemaining.value > 0) {
-            readMore(buffer, input, bytesRemaining);
-        }
-
-        return ByteUtils.readVarint(buffer);
-    }
-
-    private static int skipLengthDelimitedField(ByteBuffer buffer, DataInput input, IntRef bytesRemaining) throws IOException {
-        boolean needMore = false;
-        int sizeInBytes = -1;
-        int bytesToSkip = -1;
-
-        while (true) {
-            if (needMore) {
-                readMore(buffer, input, bytesRemaining);
-                needMore = false;
-            }
-
-            if (bytesToSkip < 0) {
-                if (buffer.remaining() < 5 && bytesRemaining.value > 0) {
-                    needMore = true;
-                } else {
-                    sizeInBytes = ByteUtils.readVarint(buffer);
-                    if (sizeInBytes <= 0)
-                        return sizeInBytes;
-                    else
-                        bytesToSkip = sizeInBytes;
-
-                }
-            } else {
-                if (bytesToSkip > buffer.remaining()) {
-                    bytesToSkip -= buffer.remaining();
-                    buffer.position(buffer.limit());
-                    needMore = true;
-                } else {
-                    buffer.position(buffer.position() + bytesToSkip);
-                    return sizeInBytes;
-                }
-            }
-        }
-    }
-
-    private static void readMore(ByteBuffer buffer, DataInput input, IntRef bytesRemaining) throws IOException {
-        if (bytesRemaining.value > 0) {
-            byte[] array = buffer.array();
-
-            // first copy the remaining bytes to the beginning of the array;
-            // at most 4 bytes would be shifted here
-            int stepsToLeftShift = buffer.position();
-            int bytesToLeftShift = buffer.remaining();
-            for (int i = 0; i < bytesToLeftShift; i++) {
-                array[i] = array[i + stepsToLeftShift];
-            }
-
-            // then try to read more bytes to the remaining of the array
-            int bytesRead = Math.min(bytesRemaining.value, array.length - bytesToLeftShift);
-            input.readFully(array, bytesToLeftShift, bytesRead);
-            buffer.rewind();
-            // only those many bytes are readable
-            buffer.limit(bytesToLeftShift + bytesRead);
-
-            bytesRemaining.value -= bytesRead;
-        } else {
-            throw new InvalidRecordException("Invalid record size: expected to read more bytes in record payload");
+        if (skippedBytes != n) {
+            throw new EOFException("Unable to skip the expected number of bytes. Expected:" + n + " Actual: " + skippedBytes);
         }
     }
 
