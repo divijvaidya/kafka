@@ -35,7 +35,7 @@ import java.nio.ByteBuffer;
  * - Unlike BufferedInputStream, which allocates an intermediate buffer, this uses a buffer supplier to create the
  * intermediate buffer
  * - Unlike DataInputStream, the readByte method does not push the reading of a byte to sourceStream.
- *
+ * <p>
  * Note that:
  * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
  * - many method are un-supported in this class because they aren't currently used in the caller code.
@@ -53,18 +53,24 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      * Intermediate buffer to store the chunk of output data. The ChunkedDataInputStream is considered closed if
      * this buffer is null.
      */
-    private ByteBuffer intermediateBuf;
+    private byte[] intermediateBuf;
+    protected int limit;
+    protected int pos;
+    private ByteBuffer buf;
+
 
     public ChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         this.bufferSupplier = bufferSupplier;
         this.sourceStream = sourceStream;
-        intermediateBuf = bufferSupplier.get(intermediateBufSize);
-        // set for reading.
-        intermediateBuf.flip();
+        buf = bufferSupplier.get(intermediateBufSize);
+        if (!buf.hasArray() || (buf.arrayOffset() != 0)) {
+            throw new IllegalArgumentException("provided ByteBuffer lacks array or has non-zero arrayOffset");
+        }
+        intermediateBuf = buf.array();
     }
 
-    private ByteBuffer getBufIfOpen() throws IOException {
-        ByteBuffer buffer = intermediateBuf;
+    private byte[] getBufIfOpen() throws IOException {
+        byte[] buffer = intermediateBuf;
         if (buffer == null)
             throw new IOException("Stream closed");
         return buffer;
@@ -72,12 +78,13 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public int read() throws IOException {
-        ensureOpen();
-        int n = fillIfNotAvailable();
-        if (n < 0)
-            return -1;
+        if (pos >= limit) {
+            fill();
+            if (pos >= limit)
+                return -1;
+        }
 
-        return Byte.toUnsignedInt(intermediateBuf.get());
+        return getBufIfOpen()[pos++] & 0xff;
     }
 
     private InputStream getInIfOpen() throws IOException {
@@ -92,19 +99,15 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      * in the buffer. For optimal performance, read as much data as possible in this call.
      */
     private int fill() throws IOException {
-        ByteBuffer buffer = getBufIfOpen();
+        byte[] buffer = getBufIfOpen();
 
         // switch to writing mode
-        buffer.compact();
-
-        int toRead = buffer.remaining();
-        int bytesRead = getInIfOpen().read(buffer.array(), buffer.position(), toRead);
+        pos = 0;
+        limit = pos;
+        int bytesRead = getInIfOpen().read(buffer, pos, buffer.length - pos);
 
         if (bytesRead > 0)
-            buffer.position(buffer.position() + bytesRead);
-
-        // prepare for reading
-        buffer.flip();
+            limit = bytesRead + pos;
 
         return bytesRead;
     }
@@ -116,25 +119,18 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public void close() throws IOException {
-        ByteBuffer buf = intermediateBuf;
+        byte[] mybuf = intermediateBuf;
         intermediateBuf = null;
 
         InputStream input = sourceStream;
         sourceStream = null;
 
-        if (buf != null)
+        if (mybuf != null)
             bufferSupplier.release(buf);
         if (input != null)
             input.close();
     }
 
-    /**
-     *
-     *
-     * @param toSkipBytes the number of bytes to be skipped.
-     * @return
-     * @throws IOException
-     */
     @Override
     public long skip(long toSkipBytes) throws IOException {
         throw new UnsupportedOperationException();
@@ -142,15 +138,11 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public int available() throws IOException {
-        if (intermediateBuf == null) {
-            return 0;
-        }
-
-        int n = fillIfNotAvailable();
-        if (n < 0)
-            return 0;
-
-        return intermediateBuf.remaining();
+        int n = limit - pos;
+        int avail = getInIfOpen().available();
+        return n > (Integer.MAX_VALUE - avail)
+            ? Integer.MAX_VALUE
+            : n + avail;
     }
 
     @Override
@@ -166,20 +158,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     @Override
     public void reset() {
         throw new RuntimeException("reset not supported");
-    }
-
-    /**
-     *
-     * @throws IOException
-     * @throws EOFException
-     */
-    private int fillIfNotAvailable() throws IOException {
-        if (!intermediateBuf.hasRemaining()) {
-            int bytesRead = fill();
-            if (bytesRead < 0)
-                return -1;
-        }
-        return 0;
     }
 
     @Override
@@ -200,14 +178,15 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         int bytesRead = 0;
         int totalRead = 0;
         while (totalRead < len) {
-            int bytesToRead = Math.min(intermediateBuf.remaining(), len - totalRead);
+            int avail = limit - pos;
+            int bytesToRead = (avail < (len - totalRead)) ? avail : (len - totalRead);
 
-            if (intermediateBuf.hasRemaining()) {
-                System.arraycopy(intermediateBuf.array(), intermediateBuf.position(), b, off + totalRead, bytesToRead);
-                intermediateBuf.position(intermediateBuf.position() + bytesToRead);
+            if (pos < limit) {
+                System.arraycopy(intermediateBuf, pos, b, off + totalRead, bytesToRead);
+                pos += bytesToRead;
                 bytesRead += bytesToRead;
             } else {
-                if (bytesToRead >= intermediateBuf.capacity()) {
+                if (bytesToRead >= intermediateBuf.length) {
                     // don't use intermediate buffer if we need to read more than it's capacity
                     bytesRead = getInIfOpen().read(b, off + totalRead, bytesToRead);
                 } else {
@@ -231,26 +210,22 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      */
     @Override
     public int skipBytes(int toSkip) throws IOException {
-        ensureOpen();
-
         if (toSkip <= 0) {
             return 0;
         }
 
         int totalSkipped = 0;
-        int bytesToRead = 0;
         while (totalSkipped < toSkip) {
-            if (!intermediateBuf.hasRemaining()) {
-                bytesToRead = fill();
+            if (pos >= limit) {
+                fill();
+                if (pos >= limit)
+                    break;
             }
 
-            if (bytesToRead < 0) {
-                break;
-            } else {
-                bytesToRead = Math.min(intermediateBuf.remaining(), toSkip - totalSkipped);
-                intermediateBuf.position(intermediateBuf.position() + bytesToRead);
-                totalSkipped += bytesToRead;
-            }
+            int avail = limit - pos;
+            int bytesToRead = (avail < (toSkip - totalSkipped)) ? avail : (toSkip - totalSkipped);
+            pos += bytesToRead;
+            totalSkipped += bytesToRead;
         }
 
         return totalSkipped;
@@ -263,12 +238,12 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public byte readByte() throws IOException {
-        ensureOpen();
-        int n = fillIfNotAvailable();
-        if (n < 0)
-            throw new EOFException();
-
-        return intermediateBuf.get();
+        if (pos >= limit) {
+            fill();
+            if (pos >= limit)
+                throw new EOFException();
+        }
+        return getBufIfOpen()[pos++];
     }
 
     @Override

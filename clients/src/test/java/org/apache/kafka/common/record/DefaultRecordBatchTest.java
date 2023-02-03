@@ -519,10 +519,7 @@ public class DefaultRecordBatchTest {
              */
             Arguments.of(CompressionType.LZ4, 1, smallRecordValue),
             Arguments.of(CompressionType.GZIP, 1, smallRecordValue),
-            /*
-             * Snappy uses it's own internal buffer for storing compressed data.
-             */
-            Arguments.of(CompressionType.SNAPPY, 0, smallRecordValue),
+            Arguments.of(CompressionType.SNAPPY, 1, smallRecordValue),
             /*
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding compressed data
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding uncompressed data
