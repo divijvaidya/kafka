@@ -111,8 +111,8 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer inputBuffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
-                return new KafkaLZ4BlockInputStream(inputBuffer, decompressionBufferSupplier,
-                                                    messageVersion == RecordBatch.MAGIC_VALUE_V0);
+                return new ChunkedDataInputStream(new KafkaLZ4BlockInputStream(inputBuffer, decompressionBufferSupplier,
+                                                    messageVersion == RecordBatch.MAGIC_VALUE_V0), decompressionBufferSupplier, 2 * 1024);
             } catch (Throwable e) {
                 throw new KafkaException(e);
             }
