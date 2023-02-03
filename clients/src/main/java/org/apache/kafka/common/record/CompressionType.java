@@ -94,7 +94,7 @@ public enum CompressionType {
 
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
-            return SnappyFactory.wrapForInput(buffer);
+            return new ChunkedDataInputStream(SnappyFactory.wrapForInput(buffer), decompressionBufferSupplier, 8 * 1024);
         }
     },
 

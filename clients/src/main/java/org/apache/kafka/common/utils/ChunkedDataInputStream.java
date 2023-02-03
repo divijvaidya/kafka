@@ -21,7 +21,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 
 /**
  * ChunkedDataInputStream is a stream which reads from source stream in chunks of configurable size. The
@@ -58,7 +57,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     public ChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         this.bufferSupplier = bufferSupplier;
-        Channels.newChannel(sourceStream);
         this.sourceStream = sourceStream;
         intermediateBuf = bufferSupplier.get(intermediateBufSize);
         // set for reading.
@@ -74,14 +72,12 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public int read() throws IOException {
-        byte b;
-        try {
-            b = readByte();
-        } catch (EOFException ex) {
+        ensureOpen();
+        int n = fillIfNotAvailable();
+        if (n < 0)
             return -1;
-        }
 
-        return Byte.toUnsignedInt(b);
+        return Byte.toUnsignedInt(intermediateBuf.get());
     }
 
     private InputStream getInIfOpen() throws IOException {
@@ -150,11 +146,9 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             return 0;
         }
 
-        try {
-            fillIfNotAvailable();
-        } catch (EOFException ex) {
+        int n = fillIfNotAvailable();
+        if (n < 0)
             return 0;
-        }
 
         return intermediateBuf.remaining();
     }
@@ -179,12 +173,13 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      * @throws IOException
      * @throws EOFException
      */
-    private void fillIfNotAvailable() throws IOException {
+    private int fillIfNotAvailable() throws IOException {
         if (!intermediateBuf.hasRemaining()) {
             int bytesRead = fill();
             if (bytesRead < 0)
-                throw new EOFException();
+                return -1;
         }
+        return 0;
     }
 
     @Override
@@ -269,7 +264,10 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     @Override
     public byte readByte() throws IOException {
         ensureOpen();
-        fillIfNotAvailable();
+        int n = fillIfNotAvailable();
+        if (n < 0)
+            throw new EOFException();
+
         return intermediateBuf.get();
     }
 
