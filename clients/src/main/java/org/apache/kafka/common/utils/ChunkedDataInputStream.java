@@ -21,6 +21,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 
 /**
  * ChunkedDataInputStream is a stream which reads from source stream in chunks of configurable size. The
@@ -57,6 +58,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     public ChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         this.bufferSupplier = bufferSupplier;
+        Channels.newChannel(sourceStream);
         this.sourceStream = sourceStream;
         intermediateBuf = bufferSupplier.get(intermediateBufSize);
         // set for reading.
@@ -91,9 +93,9 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     /**
      * Fills the intermediate buffer with more data. The amount of new data read is equal to the remaining empty space
-     * in the buffer. For optimal performance,
+     * in the buffer. For optimal performance, read as much data as possible in this call.
      */
-    private void fill() throws IOException {
+    private int fill() throws IOException {
         ByteBuffer buffer = getBufIfOpen();
 
         // switch to writing mode
@@ -102,12 +104,13 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         int toRead = buffer.remaining();
         int bytesRead = getInIfOpen().read(buffer.array(), buffer.position(), toRead);
 
-        if (bytesRead > 0) {
+        if (bytesRead > 0)
             buffer.position(buffer.position() + bytesRead);
-        }
 
         // prepare for reading
         buffer.flip();
+
+        return bytesRead;
     }
 
     private void ensureOpen() throws IOException {
@@ -127,29 +130,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             bufferSupplier.release(buf);
         if (input != null)
             input.close();
-    }
-
-    private int skipInternal(int len) throws IOException {
-        fillIfNotAvailable();
-        int cnt = Math.min(intermediateBuf.remaining(), len);
-        intermediateBuf.position(intermediateBuf.position() + cnt);
-        return cnt;
-    }
-
-    /**
-     *
-     * @param b
-     * @param off
-     * @param len
-     * @return
-     * @throws IOException
-     */
-    private int readInternal(byte[] b, int off, int len) throws IOException {
-        fillIfNotAvailable();
-        int totalRead = Math.min(intermediateBuf.remaining(), len);
-        System.arraycopy(intermediateBuf.array(), intermediateBuf.position(), b, off, totalRead);
-        intermediateBuf.position(intermediateBuf.position() + totalRead);
-        return totalRead;
     }
 
     /**
@@ -197,12 +177,12 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     /**
      *
      * @throws IOException
+     * @throws EOFException
      */
     private void fillIfNotAvailable() throws IOException {
         if (!intermediateBuf.hasRemaining()) {
-            fill();
-
-            if (!intermediateBuf.hasRemaining())
+            int bytesRead = fill();
+            if (bytesRead < 0)
                 throw new EOFException();
         }
     }
@@ -222,23 +202,37 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             return;
         }
 
-        // First read the remaining data in the buffer and then read from sourceStream if required.
-        int totalRead = Math.min(intermediateBuf.remaining(), len);
-        System.arraycopy(intermediateBuf.array(), intermediateBuf.position(), b, off, totalRead);
-        intermediateBuf.position(intermediateBuf.position() + totalRead);
-
+        int bytesRead = 0;
+        int totalRead = 0;
         while (totalRead < len) {
-            int bytesRead = readInternal(b, off + totalRead, len - totalRead);
-            if (bytesRead <= 0) {
-                throw new EOFException();
+            int bytesToRead = Math.min(intermediateBuf.remaining(), len - totalRead);
+
+            if (intermediateBuf.hasRemaining()) {
+                System.arraycopy(intermediateBuf.array(), intermediateBuf.position(), b, off + totalRead, bytesToRead);
+                intermediateBuf.position(intermediateBuf.position() + bytesToRead);
+                bytesRead += bytesToRead;
+            } else {
+                if (bytesToRead >= intermediateBuf.capacity()) {
+                    // don't use intermediate buffer if we need to read more than it's capacity
+                    bytesRead = getInIfOpen().read(b, off + totalRead, bytesToRead);
+                } else {
+                    bytesRead = fill();
+                }
             }
-            totalRead += bytesRead;
+
+            if (bytesRead < 0)
+                break;
+            else
+                totalRead += bytesRead;
         }
+
+        if ((bytesRead < 0) && (totalRead == 0))
+            throw new EOFException();
     }
 
     /**
      * This implementation of skip reads the data from sourceStream in chunks, copies the data into intermediate buffer
-     * and skips it. The implementation is similar to read() except the remaining data is
+     * and skips it. Note that this method doesn't push the skip() to sourceStream's implementation.
      */
     @Override
     public int skipBytes(int toSkip) throws IOException {
@@ -249,20 +243,21 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         }
 
         int totalSkipped = 0;
-
-        // first skip the data that already exists in intermediate buffer
-        int cnt = Math.min(intermediateBuf.remaining(), toSkip);
-        intermediateBuf.position(intermediateBuf.position() + cnt);
-        totalSkipped += cnt;
-
+        int bytesToRead = 0;
         while (totalSkipped < toSkip) {
-            int bytesSkippedInThisCall = skipInternal(toSkip - totalSkipped);
-            if (bytesSkippedInThisCall <= 0)
-                return (totalSkipped == 0) ? bytesSkippedInThisCall : totalSkipped;
-            totalSkipped += bytesSkippedInThisCall;
-            if (totalSkipped > toSkip)
-                throw new IOException("Skipped more bytes than necessary. Expected=" + toSkip + " Skipped=" + bytesSkippedInThisCall);
+            if (!intermediateBuf.hasRemaining()) {
+                bytesToRead = fill();
+            }
+
+            if (bytesToRead < 0) {
+                break;
+            } else {
+                bytesToRead = Math.min(intermediateBuf.remaining(), toSkip - totalSkipped);
+                intermediateBuf.position(intermediateBuf.position() + bytesToRead);
+                totalSkipped += bytesToRead;
+            }
         }
+
         return totalSkipped;
     }
 

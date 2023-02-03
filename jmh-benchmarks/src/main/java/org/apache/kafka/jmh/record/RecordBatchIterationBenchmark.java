@@ -82,7 +82,7 @@ public class RecordBatchIterationBenchmark extends BaseRecordBatchBenchmark {
         try(final BufferSupplier bufferSupplier = bufferSupplierStr.equals("CREATE") ? BufferSupplier.create() : BufferSupplier.NO_CACHING) {
             for (int i = 0; i < batchCount; ++i) {
                 for (MutableRecordBatch batch : MemoryRecords.readableRecords(batchBuffers[i].duplicate()).batches()) {
-                    try (CloseableIterator<Record> iterator = batch.skipKeyValueIterator(bufferSupplier)) {
+                    try (CloseableIterator<Record> iterator = batch.skipKeyValueIterator(requestLocal.bufferSupplier())) {
                         while (iterator.hasNext())
                             bh.consume(iterator.next());
                     }

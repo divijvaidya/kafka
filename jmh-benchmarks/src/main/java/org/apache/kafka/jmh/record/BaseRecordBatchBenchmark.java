@@ -77,7 +77,7 @@ public abstract class BaseRecordBatchBenchmark {
     LogValidator.MetricsRecorder validatorMetricsRecorder = UnifiedLog.newValidatorMetricsRecorder(
         new BrokerTopicStats().allTopicsStats());
 
-    @Setup
+    @Setup(Level.Iteration)
     public void init() {
         // For v0 batches a zero starting offset is much faster but that will almost never happen.
         // For v2 batches we use starting offset = 0 as these batches are relative to the base
