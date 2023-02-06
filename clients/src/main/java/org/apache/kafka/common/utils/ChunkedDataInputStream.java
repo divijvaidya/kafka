@@ -55,18 +55,25 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      */
     private byte[] intermediateBuf;
     protected int limit;
+    /**
+     *
+     */
     protected int pos;
-    private ByteBuffer buf;
+    /**
+     * Reference for the intermediate buffer. This reference is only kept for releasing the buffer from the '
+     * buffer supplier.
+     */
+    private ByteBuffer intermediateBufRef;
 
 
     public ChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         this.bufferSupplier = bufferSupplier;
         this.sourceStream = sourceStream;
-        buf = bufferSupplier.get(intermediateBufSize);
-        if (!buf.hasArray() || (buf.arrayOffset() != 0)) {
+        intermediateBufRef = bufferSupplier.get(intermediateBufSize);
+        if (!intermediateBufRef.hasArray() || (intermediateBufRef.arrayOffset() != 0)) {
             throw new IllegalArgumentException("provided ByteBuffer lacks array or has non-zero arrayOffset");
         }
-        intermediateBuf = buf.array();
+        intermediateBuf = intermediateBufRef.array();
     }
 
     private byte[] getBufIfOpen() throws IOException {
@@ -87,7 +94,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         return getBufIfOpen()[pos++] & 0xff;
     }
 
-    private InputStream getInIfOpen() throws IOException {
+    InputStream getInIfOpen() throws IOException {
         InputStream input = sourceStream;
         if (input == null)
             throw new IOException("Stream closed");
@@ -98,7 +105,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
      * Fills the intermediate buffer with more data. The amount of new data read is equal to the remaining empty space
      * in the buffer. For optimal performance, read as much data as possible in this call.
      */
-    private int fill() throws IOException {
+    int fill() throws IOException {
         byte[] buffer = getBufIfOpen();
 
         // switch to writing mode
@@ -126,7 +133,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         sourceStream = null;
 
         if (mybuf != null)
-            bufferSupplier.release(buf);
+            bufferSupplier.release(intermediateBufRef);
         if (input != null)
             input.close();
     }
@@ -204,31 +211,20 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             throw new EOFException();
     }
 
-    /**
-     * This implementation of skip reads the data from sourceStream in chunks, copies the data into intermediate buffer
-     * and skips it. Note that this method doesn't push the skip() to sourceStream's implementation.
-     */
     @Override
     public int skipBytes(int toSkip) throws IOException {
         if (toSkip <= 0) {
             return 0;
         }
 
-        int totalSkipped = 0;
-        while (totalSkipped < toSkip) {
-            if (pos >= limit) {
-                fill();
-                if (pos >= limit)
-                    break;
-            }
+        int total = 0;
+        int cur = 0;
 
-            int avail = limit - pos;
-            int bytesToRead = (avail < (toSkip - totalSkipped)) ? avail : (toSkip - totalSkipped);
-            pos += bytesToRead;
-            totalSkipped += bytesToRead;
+        while ((total < toSkip) && ((cur = (int) getInIfOpen().skip(toSkip - total)) > 0)) {
+            total += cur;
         }
 
-        return totalSkipped;
+        return total;
     }
 
     @Override

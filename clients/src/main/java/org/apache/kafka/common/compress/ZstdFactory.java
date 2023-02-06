@@ -25,7 +25,6 @@ import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
-import org.apache.kafka.common.utils.ChunkedDataInputStream;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
@@ -56,7 +55,7 @@ public class ZstdFactory {
             // `ZstdInputStreamNoFinalizer` here. Every read() call to `ZstdInputStreamNoFinalizer` will be a JNI call
             // and the caller is expected to balance the tradeoff between reading large amount of data vs. making
             // multiple JNI calls.
-            return new ChunkedDataInputStream(getZstdStream(buffer, decompressionBufferSupplier), decompressionBufferSupplier, getRecommendedDOutSize());
+            return getZstdStream(buffer, decompressionBufferSupplier);
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
@@ -75,15 +74,5 @@ public class ZstdFactory {
             }
         };
         return new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(compressedBuf), bufferPool);
-    }
-
-    public static int getRecommendedDOutSize() {
-        /**
-         * Size of intermediate buffer which contains uncompressed data.
-         * This size should be <= ZSTD_BLOCKSIZE_MAX
-         *
-         * see: https://github.com/facebook/zstd/blob/dev/lib/zstd.h#L849
-         */
-        return 16 * 1024; // 16 KB
     }
 }
