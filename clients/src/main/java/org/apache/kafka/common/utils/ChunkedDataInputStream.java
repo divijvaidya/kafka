@@ -108,7 +108,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     int fill() throws IOException {
         byte[] buffer = getBufIfOpen();
 
-        System.out.println("inside fill");
         // switch to writing mode
         pos = 0;
         limit = pos;
