@@ -216,15 +216,20 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
         if (toSkip <= 0) {
             return 0;
         }
+        int totalSkipped = 0;
 
-        int total = 0;
-        int cur = 0;
+        // Skip what exists in the intermediate buffer first
+        int avail = limit - pos;
+        int bytesToRead = (avail < (toSkip - totalSkipped)) ? avail : (toSkip - totalSkipped);
+        pos += bytesToRead;
+        totalSkipped += bytesToRead;
 
-        while ((total < toSkip) && ((cur = (int) getInIfOpen().skip(toSkip - total)) > 0)) {
-            total += cur;
+        // Use sourceStream's skip() to skip the rest
+        while ((totalSkipped < toSkip) && ((bytesToRead = (int) getInIfOpen().skip(toSkip - totalSkipped)) > 0)) {
+            totalSkipped += bytesToRead;
         }
 
-        return total;
+        return totalSkipped;
     }
 
     @Override

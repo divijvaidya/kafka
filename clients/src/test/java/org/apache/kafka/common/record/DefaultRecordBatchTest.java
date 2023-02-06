@@ -24,6 +24,7 @@ import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ChunkedDataInputStream;
 import org.apache.kafka.common.utils.CloseableIterator;
+import org.apache.kafka.common.utils.SkippableChunkedDataInputStream;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.Test;
@@ -551,7 +552,7 @@ public class DefaultRecordBatchTest {
              final InputStream zstdStream = spy(ZstdFactory.getZstdStream(recordsBuffer, bufferSupplier));
              final MockedStatic<ZstdFactory> zstdFactoryMock = Mockito.mockStatic(ZstdFactory.class)) {
             zstdFactoryMock.when(() -> ZstdFactory.wrapForInput(any(ByteBuffer.class), anyByte(), any(BufferSupplier.class)))
-                .thenReturn(new ChunkedDataInputStream(zstdStream, bufferSupplier, 16 * 1024));
+                .thenReturn(new SkippableChunkedDataInputStream(zstdStream, bufferSupplier, 16 * 1024));
             try (CloseableIterator<Record> streamingIterator = batch.skipKeyValueIterator(bufferSupplier)) {
                 assertNotNull(streamingIterator);
                 Utils.toList(streamingIterator);
