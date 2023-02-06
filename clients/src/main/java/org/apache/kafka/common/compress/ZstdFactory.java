@@ -27,7 +27,6 @@ import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
 import java.io.BufferedOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -50,29 +49,25 @@ public class ZstdFactory {
             // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
             // implementation doesn't require locking or soft references. The buffer allocated by this buffer pool is
             // used by zstd-jni for 1\ reading compressed data from input stream into a buffer before passing it over JNI
-            // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call.
+            // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call
+            BufferPool bufferPool = new BufferPool() {
+                @Override
+                public ByteBuffer get(int capacity) {
+                    return decompressionBufferSupplier.get(capacity);
+                }
+
+                @Override
+                public void release(ByteBuffer buffer) {
+                    decompressionBufferSupplier.release(buffer);
+                }
+            };
             // We do not use an intermediate buffer to store the decompressed data as a result of JNI read() calls using
             // `ZstdInputStreamNoFinalizer` here. Every read() call to `ZstdInputStreamNoFinalizer` will be a JNI call
             // and the caller is expected to balance the tradeoff between reading large amount of data vs. making
             // multiple JNI calls.
-            return getZstdStream(buffer, decompressionBufferSupplier);
+            return new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer), bufferPool);
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
-    }
-
-    public static InputStream getZstdStream(final ByteBuffer compressedBuf, BufferSupplier decompressionBufferSupplier) throws IOException {
-        BufferPool bufferPool = new BufferPool() {
-            @Override
-            public ByteBuffer get(int capacity) {
-                return decompressionBufferSupplier.get(capacity);
-            }
-
-            @Override
-            public void release(ByteBuffer buffer) {
-                decompressionBufferSupplier.release(buffer);
-            }
-        };
-        return new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(compressedBuf), bufferPool);
     }
 }

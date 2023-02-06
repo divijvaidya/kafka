@@ -22,7 +22,6 @@ import org.apache.kafka.common.errors.CorruptRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.BufferSupplier;
-import org.apache.kafka.common.utils.ChunkedDataInputStream;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.SkippableChunkedDataInputStream;
 import org.apache.kafka.common.utils.Utils;
@@ -32,8 +31,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,10 +55,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class DefaultRecordBatchTest {
     private static final int MAX_HEADER_SIZE = 5;
@@ -516,9 +516,11 @@ public class DefaultRecordBatchTest {
 
         return Stream.of(
             /*
+             * 1 allocation per batch (i.e. per iterator instance) for buffer holding compressed data
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding uncompressed data
+             * = 2 buffer allocations
              */
-            Arguments.of(CompressionType.LZ4, 1, smallRecordValue),
+            Arguments.of(CompressionType.LZ4, 2, smallRecordValue),
             Arguments.of(CompressionType.GZIP, 1, smallRecordValue),
             Arguments.of(CompressionType.SNAPPY, 1, smallRecordValue),
             /*
@@ -542,17 +544,20 @@ public class DefaultRecordBatchTest {
         // Buffer containing compressed data
         final ByteBuffer compressedBuf = records.buffer();
         // Create a RecordBatch object
-        final DefaultRecordBatch batch = new DefaultRecordBatch(compressedBuf.duplicate());
+        final DefaultRecordBatch batch = spy(new DefaultRecordBatch(compressedBuf.duplicate()));
+        final CompressionType mockCompression = mock(CompressionType.ZSTD.getClass());
+        doReturn(mockCompression).when(batch).compressionType();
 
         // Buffer containing compressed records to be used for creating zstd-jni stream
         ByteBuffer recordsBuffer = compressedBuf.duplicate();
         recordsBuffer.position(RECORDS_OFFSET);
 
         try (final BufferSupplier bufferSupplier = BufferSupplier.create();
-             final InputStream zstdStream = spy(ZstdFactory.getZstdStream(recordsBuffer, bufferSupplier));
-             final MockedStatic<ZstdFactory> zstdFactoryMock = Mockito.mockStatic(ZstdFactory.class)) {
-            zstdFactoryMock.when(() -> ZstdFactory.wrapForInput(any(ByteBuffer.class), anyByte(), any(BufferSupplier.class)))
-                .thenReturn(new SkippableChunkedDataInputStream(zstdStream, bufferSupplier, 16 * 1024));
+             final InputStream zstdStream = spy(ZstdFactory.wrapForInput(recordsBuffer, batch.magic(), bufferSupplier));
+             final InputStream chunkedStream = new SkippableChunkedDataInputStream(zstdStream, bufferSupplier, 16 * 1024)) {
+
+            when(mockCompression.wrapForInput(any(ByteBuffer.class), anyByte(), any(BufferSupplier.class))).thenReturn(chunkedStream);
+
             try (CloseableIterator<Record> streamingIterator = batch.skipKeyValueIterator(bufferSupplier)) {
                 assertNotNull(streamingIterator);
                 Utils.toList(streamingIterator);
@@ -572,12 +577,15 @@ public class DefaultRecordBatchTest {
 
         return Stream.of(
             /*
-             * We expect exactly 1 read call to the JNI for total record size < 16KB
+             * We expect exactly 2 read call to the JNI:
+             * 1 for fetching the full data (size < 16KB)
+             * 1 for detecting end of stream by trying to read more data
              */
             Arguments.of(2, smallRecordValue),
             /*
-             * We expect exactly 3 read call to the JNI with size of record:
-             * because TODO
+             * We expect exactly 4 read call to the JNI:
+             * 3 for fetching the full data (Math.ceil(40/16))
+             * 1 for detecting end of stream by trying to read more data
              */
             Arguments.of(4, largeRecordValue)
         );
