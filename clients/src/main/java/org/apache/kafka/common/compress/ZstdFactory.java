@@ -32,6 +32,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 public class ZstdFactory {
+
     private ZstdFactory() { }
 
     public static OutputStream wrapForOutput(ByteBufferOutputStream buffer) {
@@ -47,7 +48,7 @@ public class ZstdFactory {
     public static InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
         try {
             // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
-            // implementation doesn't require locking or soft references. The buffer allocated by this buffer pool is
+            // implementation doesn't require locking or soft references.The buffer allocated by this buffer pool is
             // used by zstd-jni for 1\ reading compressed data from input stream into a buffer before passing it over JNI
             // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call
             BufferPool bufferPool = new BufferPool() {

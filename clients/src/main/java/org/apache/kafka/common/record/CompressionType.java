@@ -67,7 +67,7 @@ public enum CompressionType {
         @Override
         public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
-                // Set input buffer (compressed) to 8 KB (0.5 KB by default) to ensure reasonable performance in cases
+                // Set output buffer (uncompressed) to 16 KB and Set input buffer (compressed) to 8 KB (0.5 KB by default) to ensure reasonable performance in cases
                 // where the caller reads a small number of bytes (potentially a single byte)
                 return new SkippableChunkedDataInputStream(new GZIPInputStream(new ByteBufferInputStream(buffer), 8 * 1024), decompressionBufferSupplier, getRecommendedDOutSize());
             } catch (Exception e) {

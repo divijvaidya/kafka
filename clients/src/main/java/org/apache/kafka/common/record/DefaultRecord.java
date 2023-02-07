@@ -24,7 +24,6 @@ import org.apache.kafka.common.utils.Utils;
 
 import java.io.DataInput;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -380,8 +379,6 @@ public class DefaultRecord implements Record {
                                                           int baseSequence,
                                                           Long logAppendTime) throws IOException {
         try {
-            // reading the attributes / timestamp / offset and key-size does not require
-            // any byte array allocation and therefore we can just read them straight-forwardly
             byte attributes = input.readByte();
             long timestampDelta = ByteUtils.readVarlong(input);
             long timestamp = baseTimestamp + timestampDelta;
@@ -394,16 +391,15 @@ public class DefaultRecord implements Record {
                 DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
                 RecordBatch.NO_SEQUENCE;
 
-            // first skip key
+            // skip key
             int keySize = ByteUtils.readVarint(input);
-            // key could be null
             skipBytes(input, keySize);
 
-            // then skip value
+            // skip value
             int valueSize = ByteUtils.readVarint(input);
             skipBytes(input, valueSize);
 
-            // then skip header
+            // skip header
             int numHeaders = ByteUtils.readVarint(input);
             if (numHeaders < 0)
                 throw new InvalidRecordException("Found invalid number of record headers " + numHeaders);
@@ -426,15 +422,18 @@ public class DefaultRecord implements Record {
 
 
     /**
-     * Skips n bytes from
+     * Skips n bytes from the data input.
+     *
+     * No-op for case where bytesToSkip <= 0. This could occur for cases where field is expected to be null.
+     * @throws  InvalidRecordException if the number of bytes could not be skipped.
      */
-    private static void skipBytes(DataInput in, int n) throws IOException {
-        if (n <= 0) return;
+    private static void skipBytes(DataInput in, int bytesToSkip) throws IOException {
+        if (bytesToSkip <= 0) return;
 
-        long skippedBytes = in.skipBytes(n);
+        long skippedBytes = in.skipBytes(bytesToSkip);
 
-        if (skippedBytes != n) {
-            throw new EOFException("Unable to skip the expected number of bytes. Expected:" + n + " Actual: " + skippedBytes);
+        if (skippedBytes != bytesToSkip) {
+            throw new InvalidRecordException("Unable to skip the expected number of bytes. Expected:" + bytesToSkip + " Actual: " + skippedBytes);
         }
     }
 

@@ -41,8 +41,6 @@ public class SnappyFactory {
 
     public static InputStream wrapForInput(ByteBuffer buffer) {
         try {
-            // SnappyInputStream performs chunking of uncompressed data internally hence, wrapping the stream here
-            // another buffer won't provide any additional performance benefits.
             return new SnappyInputStream(new ByteBufferInputStream(buffer));
         } catch (Throwable e) {
             throw new KafkaException(e);

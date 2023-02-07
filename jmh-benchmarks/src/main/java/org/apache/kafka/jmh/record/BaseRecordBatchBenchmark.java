@@ -63,7 +63,7 @@ public abstract class BaseRecordBatchBenchmark {
     private Bytes bytes = Bytes.RANDOM;
 
     @Param(value = {"NO_CACHING", "CREATE"})
-    String bufferSupplierStr = "NO_CACHING";
+    private String bufferSupplierStr = "NO_CACHING";
 
     // zero starting offset is much faster for v1 batches, but that will almost never happen
     int startingOffset;
