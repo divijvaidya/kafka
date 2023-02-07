@@ -20,26 +20,15 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * ChunkedDataInputStream is a stream which reads from source stream in chunks of configurable size. The
- * implementation of this stream is optimized to reduce the number of calls to sourceStream#read(). This works best in
- * scenarios where sourceStream()#read() call is expensive, e.g. when the call crosses JNI boundary.
+ * SkippableChunkedDataInputStream is a variant of ChunkedDataInputStream which does not push skip() to the sourceStream.
  * <p>
- * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
- * differences:
- * - Unlike BufferedInputStream.skip(), this does not push skip() to sourceStream. We want to avoid pushing this to
- * sourceStream because it's implementation maybe inefficient, e.g. the case of ZstdInputStream which allocates a new
- * buffer from buffer pool, per skip call.
- * - Unlike BufferedInputStream, which allocates an intermediate buffer, this uses a buffer supplier to create the
- * intermediate buffer
- * - Unlike DataInputStream, the readByte method does not push the reading of a byte to sourceStream.
- * <p>
- * Note that:
- * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
- * - many method are un-supported in this class because they aren't currently used in the caller code.
+ * Unlike BufferedInputStream.skip() and ChunkedDataInputStream.skip(), this does not push skip() to sourceStream.
+ * We want to avoid pushing this to sourceStream because it's implementation maybe inefficient, e.g. the case of Z
+ * stdInputStream which allocates a new buffer from buffer pool, per skip call.
+ *
+ * @see ChunkedDataInputStream
  */
 public class SkippableChunkedDataInputStream extends ChunkedDataInputStream {
-
-
     public SkippableChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         super(sourceStream, bufferSupplier, intermediateBufSize);
     }

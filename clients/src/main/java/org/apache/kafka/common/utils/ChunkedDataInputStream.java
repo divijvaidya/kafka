@@ -25,13 +25,11 @@ import java.nio.ByteBuffer;
 /**
  * ChunkedDataInputStream is a stream which reads from source stream in chunks of configurable size. The
  * implementation of this stream is optimized to reduce the number of calls to sourceStream#read(). This works best in
- * scenarios where sourceStream()#read() call is expensive, e.g. when the call crosses JNI boundary.
+ * scenarios where sourceStream#read() call is expensive, e.g. when the call crosses JNI boundary.
  * <p>
  * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
  * differences:
- * - Unlike BufferedInputStream.skip(), this does not push skip() to sourceStream. We want to avoid pushing this to
- * sourceStream because it's implementation maybe inefficient, e.g. the case of ZstdInputStream which allocates a new
- * buffer from buffer pool, per skip call.
+ * - Unlike BufferedInputStream.skip()
  * - Unlike BufferedInputStream, which allocates an intermediate buffer, this uses a buffer supplier to create the
  * intermediate buffer
  * - Unlike DataInputStream, the readByte method does not push the reading of a byte to sourceStream.
@@ -39,6 +37,8 @@ import java.nio.ByteBuffer;
  * Note that:
  * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
  * - many method are un-supported in this class because they aren't currently used in the caller code.
+ * - the implementation of this class is performance sensitive. Minor changes as usage of ByteBuffer instead of byte[]
+ *   can significantly impact performance, hence, proceed with caution.
  */
 public class ChunkedDataInputStream extends InputStream implements DataInput {
     /**
@@ -184,30 +184,33 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
         int bytesRead = 0;
         int totalRead = 0;
+        int toRead = len;
         while (totalRead < len) {
-            int avail = limit - pos;
-            int bytesToRead = (avail < (len - totalRead)) ? avail : (len - totalRead);
-
-            if (pos < limit) {
-                System.arraycopy(intermediateBuf, pos, b, off + totalRead, bytesToRead);
-                pos += bytesToRead;
-                bytesRead += bytesToRead;
-            } else {
-                if (bytesToRead >= intermediateBuf.length) {
+            bytesRead = 0;
+            if (pos >= limit) {
+                if (toRead >= intermediateBuf.length) {
                     // don't use intermediate buffer if we need to read more than it's capacity
-                    bytesRead = getInIfOpen().read(b, off + totalRead, bytesToRead);
+                    bytesRead = getInIfOpen().read(b, off + totalRead, toRead);
                 } else {
-                    bytesRead = fill();
+                    fill();
+                    if (pos >= limit)
+                        break;
                 }
+            } else {
+                int avail = limit - pos;
+                toRead = (avail < (len - totalRead)) ? avail : (len - totalRead);
+                System.arraycopy(intermediateBuf, pos, b, off + totalRead, toRead);
+                pos += toRead;
+                bytesRead = toRead;
             }
 
             if (bytesRead < 0)
                 break;
-            else
-                totalRead += bytesRead;
+
+            totalRead += bytesRead;
         }
 
-        if ((bytesRead < 0) && (totalRead == 0))
+        if ((bytesRead <= 0) && (totalRead < len))
             throw new EOFException();
     }
 
