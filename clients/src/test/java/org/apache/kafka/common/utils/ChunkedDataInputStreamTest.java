@@ -56,7 +56,11 @@ public class ChunkedDataInputStreamTest {
     public void readFully_testCorrectness(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
         try (InputStream is = new ChunkedDataInputStream(new ByteBufferInputStream(input), supplier, 10)) {
-            ((DataInput) is).readFully(got, 0, got.length);
+            // perform a 2 pass read. this tests the scenarios where one pass may lead to partially consumed
+            // intermediate buffer
+            int toRead = RANDOM.nextInt(got.length);
+            ((DataInput) is).readFully(got, 0, toRead);
+            ((DataInput) is).readFully(got, toRead, got.length - toRead);
         }
         assertArrayEquals(input.array(), got);
     }

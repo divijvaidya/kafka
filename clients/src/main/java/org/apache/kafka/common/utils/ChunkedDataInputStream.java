@@ -184,9 +184,10 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
         int bytesRead = 0;
         int totalRead = 0;
-        int toRead = len;
+        int toRead;
         while (totalRead < len) {
             bytesRead = 0;
+            toRead = len - totalRead;
             if (pos >= limit) {
                 if (toRead >= intermediateBuf.length) {
                     // don't use intermediate buffer if we need to read more than it's capacity
@@ -198,7 +199,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
                 }
             } else {
                 int avail = limit - pos;
-                toRead = (avail < (len - totalRead)) ? avail : (len - totalRead);
+                toRead = (avail < toRead) ? avail : toRead;
                 System.arraycopy(intermediateBuf, pos, b, off + totalRead, toRead);
                 pos += toRead;
                 bytesRead = toRead;
