@@ -179,7 +179,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
@@ -224,7 +224,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
@@ -283,7 +283,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
@@ -330,7 +330,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
@@ -377,7 +377,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
@@ -428,7 +428,7 @@ public class DefaultRecordTest {
         buf.flip();
         DataInputStream inputStream = new DataInputStream(new ByteBufferInputStream(buf));
         assertThrows(InvalidRecordException.class,
-            () -> DefaultRecord.readPartiallyFrom(inputStream, skipArray, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
+            () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
 
     @Test
