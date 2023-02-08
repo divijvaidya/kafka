@@ -28,6 +28,7 @@ import org.apache.kafka.common.utils.ChunkedDataInputStream;
 import org.apache.kafka.common.utils.SkippableChunkedDataInputStream;
 
 import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;

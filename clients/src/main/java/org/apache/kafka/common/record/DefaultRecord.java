@@ -277,8 +277,10 @@ public class DefaultRecord implements Record {
                                          int baseSequence,
                                          Long logAppendTime) throws IOException {
         int sizeOfBodyInBytes = ByteUtils.readVarint(input);
+        ByteBuffer recordBuffer = ByteBuffer.allocate(sizeOfBodyInBytes);
+        input.readFully(recordBuffer.array(), 0, sizeOfBodyInBytes);
         int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
-        return readFrom(input, totalSizeInBytes, baseOffset, baseTimestamp,
+        return readFrom(recordBuffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
                 baseSequence, logAppendTime);
     }
 
@@ -316,8 +318,8 @@ public class DefaultRecord implements Record {
             int offsetDelta = ByteUtils.readVarint(buffer);
             long offset = baseOffset + offsetDelta;
             int sequence = baseSequence >= 0 ?
-                DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
-                RecordBatch.NO_SEQUENCE;
+                    DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
+                    RecordBatch.NO_SEQUENCE;
 
             ByteBuffer key = null;
             int keySize = ByteUtils.readVarint(buffer);
@@ -350,63 +352,10 @@ public class DefaultRecord implements Record {
             // validate whether we have read all header bytes in the current record
             if (buffer.position() - recordStart != sizeOfBodyInBytes)
                 throw new InvalidRecordException("Invalid record size: expected to read " + sizeOfBodyInBytes +
-                    " bytes in record payload, but instead read " + (buffer.position() - recordStart));
+                        " bytes in record payload, but instead read " + (buffer.position() - recordStart));
 
             return new DefaultRecord(sizeInBytes, attributes, offset, timestamp, sequence, key, value, headers);
         } catch (BufferUnderflowException | IllegalArgumentException e) {
-            throw new InvalidRecordException("Found invalid record structure", e);
-        }
-    }
-
-    private static DefaultRecord readFrom(DataInput input,
-                                          int sizeInBytes,
-                                          long baseOffset,
-                                          long baseTimestamp,
-                                          int baseSequence,
-                                          Long logAppendTime) {
-        try {
-            byte attributes = input.readByte();
-            long timestampDelta = ByteUtils.readVarlong(input);
-            long timestamp = baseTimestamp + timestampDelta;
-            if (logAppendTime != null)
-                timestamp = logAppendTime;
-
-            int offsetDelta = ByteUtils.readVarint(input);
-            long offset = baseOffset + offsetDelta;
-            int sequence = baseSequence >= 0 ?
-                DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
-                RecordBatch.NO_SEQUENCE;
-
-            ByteBuffer key = null;
-            int keySize = ByteUtils.readVarint(input);
-            if (keySize >= 0) {
-                key = ByteBuffer.allocate(keySize);
-                input.readFully(key.array());
-                key.position(keySize);
-                key.flip();
-            }
-
-            ByteBuffer value = null;
-            int valueSize = ByteUtils.readVarint(input);
-            if (valueSize >= 0) {
-                value = ByteBuffer.allocate(valueSize);
-                input.readFully(value.array());
-                value.position(valueSize);
-                value.flip();
-            }
-
-            int numHeaders = ByteUtils.readVarint(input);
-            if (numHeaders < 0)
-                throw new InvalidRecordException("Found invalid number of record headers " + numHeaders);
-
-            final Header[] headers;
-            if (numHeaders == 0)
-                headers = Record.EMPTY_HEADERS;
-            else
-                headers = readHeaders(input, numHeaders);
-
-            return new DefaultRecord(sizeInBytes, attributes, offset, timestamp, sequence, key, value, headers);
-        } catch (BufferUnderflowException | IllegalArgumentException | IOException e) {
             throw new InvalidRecordException("Found invalid record structure", e);
         }
     }
@@ -486,33 +435,6 @@ public class DefaultRecord implements Record {
         if (skippedBytes != bytesToSkip) {
             throw new InvalidRecordException("Unable to skip the expected number of bytes. Expected:" + bytesToSkip + " Actual: " + skippedBytes);
         }
-    }
-
-    private static Header[] readHeaders(DataInput input, int numHeaders) throws IOException {
-        Header[] headers = new Header[numHeaders];
-        for (int i = 0; i < numHeaders; i++) {
-            int headerKeySize = ByteUtils.readVarint(input);
-            if (headerKeySize < 0)
-                throw new InvalidRecordException("Invalid negative header key size " + headerKeySize);
-
-            ByteBuffer headerKeyBuffer = ByteBuffer.allocate(headerKeySize);
-            input.readFully(headerKeyBuffer.array());
-            headerKeyBuffer.position(headerKeySize);
-            headerKeyBuffer.flip();
-
-            ByteBuffer headerValue = null;
-            int headerValueSize = ByteUtils.readVarint(input);
-            if (headerValueSize >= 0) {
-                headerValue = ByteBuffer.allocate(headerValueSize);
-                input.readFully(headerValue.array());
-                headerValue.position(headerValueSize);
-                headerValue.flip();
-            }
-
-            headers[i] = new RecordHeader(headerKeyBuffer, headerValue);
-        }
-
-        return headers;
     }
 
     private static Header[] readHeaders(ByteBuffer buffer, int numHeaders) {
