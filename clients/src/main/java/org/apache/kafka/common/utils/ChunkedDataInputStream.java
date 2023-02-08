@@ -174,8 +174,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public void readFully(byte[] b, int off, int len) throws IOException {
-        ensureOpen();
-
         if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
             throw new IndexOutOfBoundsException();
         } else if (len == 0) {
@@ -189,7 +187,8 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             bytesRead = 0;
             toRead = len - totalRead;
             if (pos >= limit) {
-                if (toRead >= intermediateBuf.length) {
+                toRead = len - totalRead;
+                if (toRead >= getBufIfOpen().length) {
                     // don't use intermediate buffer if we need to read more than it's capacity
                     bytesRead = getInIfOpen().read(b, off + totalRead, toRead);
                 } else {
@@ -200,7 +199,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
             } else {
                 int avail = limit - pos;
                 toRead = (avail < toRead) ? avail : toRead;
-                System.arraycopy(intermediateBuf, pos, b, off + totalRead, toRead);
+                System.arraycopy(getBufIfOpen(), pos, b, off + totalRead, toRead);
                 pos += toRead;
                 bytesRead = toRead;
             }
@@ -299,5 +298,10 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     @Override
     public String readUTF() {
         throw new UnsupportedOperationException();
+    }
+
+    // visible for testing
+    public InputStream getSourceStream() {
+        return sourceStream;
     }
 }
