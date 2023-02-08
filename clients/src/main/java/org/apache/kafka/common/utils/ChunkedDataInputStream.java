@@ -169,7 +169,7 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
 
     @Override
     public void readFully(byte[] b) throws IOException {
-        throw new UnsupportedOperationException();
+        readFully(b, 0, b.length);
     }
 
     @Override
