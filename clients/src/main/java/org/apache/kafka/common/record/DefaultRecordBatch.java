@@ -23,14 +23,12 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.apache.kafka.common.utils.ByteUtils;
+import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Crc32C;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -270,28 +268,27 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return buffer.getInt(PARTITION_LEADER_EPOCH_OFFSET);
     }
 
-    public InputStream recordInputStream(BufferSupplier bufferSupplier) {
+    public BytesStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
-        InputStream is = compressionType().wrapForInput(buffer, magic(), bufferSupplier);
-        return (is instanceof DataInput) ? is : new DataInputStream(is);
+        return compressionType().wrapForInput(buffer, magic(), bufferSupplier);
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
-        final InputStream inputStream = recordInputStream(bufferSupplier);
+        final BytesStream inputStream = recordInputStream(bufferSupplier);
 
         if (skipKeyValue) {
             return new StreamRecordIterator(inputStream) {
                 @Override
                 protected Record doReadRecord(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) throws IOException {
-                    return DefaultRecord.readPartiallyFrom((DataInput) inputStream, baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                    return DefaultRecord.readPartiallyFrom(inputStream, baseOffset, baseTimestamp, baseSequence, logAppendTime);
                 }
             };
         } else {
             return new StreamRecordIterator(inputStream) {
                 @Override
                 protected Record doReadRecord(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) throws IOException {
-                    return DefaultRecord.readFrom((DataInput) inputStream, baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                    return DefaultRecord.readFrom(inputStream, baseOffset, baseTimestamp, baseSequence, logAppendTime);
                 }
             };
         }
@@ -623,9 +620,9 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     // visible for testing
     abstract class StreamRecordIterator extends RecordIterator {
-        private final InputStream inputStream;
+        private final BytesStream inputStream;
 
-        StreamRecordIterator(InputStream inputStream) {
+        StreamRecordIterator(BytesStream inputStream) {
             super();
             this.inputStream = inputStream;
         }

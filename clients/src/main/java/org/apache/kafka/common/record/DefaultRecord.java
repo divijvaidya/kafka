@@ -20,9 +20,9 @@ import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.ByteUtils;
+import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.Utils;
 
-import java.io.DataInput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
@@ -271,14 +271,18 @@ public class DefaultRecord implements Record {
         return result;
     }
 
-    public static DefaultRecord readFrom(DataInput input,
+    public static DefaultRecord readFrom(BytesStream input,
                                          long baseOffset,
                                          long baseTimestamp,
                                          int baseSequence,
                                          Long logAppendTime) throws IOException {
         int sizeOfBodyInBytes = ByteUtils.readVarint(input);
         ByteBuffer recordBuffer = ByteBuffer.allocate(sizeOfBodyInBytes);
-        input.readFully(recordBuffer.array(), 0, sizeOfBodyInBytes);
+        int bytesRead = input.read(recordBuffer.array(), 0, sizeOfBodyInBytes);
+        if (bytesRead == -1)
+            throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
+                " bytes in record payload, but the record payload reached EOF.");
+
         int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
         return readFrom(recordBuffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
                 baseSequence, logAppendTime);
@@ -360,7 +364,7 @@ public class DefaultRecord implements Record {
         }
     }
 
-    public static PartialDefaultRecord readPartiallyFrom(DataInput input,
+    public static PartialDefaultRecord readPartiallyFrom(BytesStream input,
                                                          long baseOffset,
                                                          long baseTimestamp,
                                                          int baseSequence,
@@ -372,7 +376,7 @@ public class DefaultRecord implements Record {
             baseSequence, logAppendTime);
     }
 
-    private static PartialDefaultRecord readPartiallyFrom(DataInput input,
+    private static PartialDefaultRecord readPartiallyFrom(BytesStream input,
                                                           int sizeInBytes,
                                                           long baseOffset,
                                                           long baseTimestamp,
@@ -427,7 +431,7 @@ public class DefaultRecord implements Record {
      * No-op for case where bytesToSkip <= 0. This could occur for cases where field is expected to be null.
      * @throws  InvalidRecordException if the number of bytes could not be skipped.
      */
-    private static void skipBytes(DataInput in, int bytesToSkip) throws IOException {
+    private static void skipBytes(BytesStream in, int bytesToSkip) throws IOException {
         if (bytesToSkip <= 0) return;
 
         long skippedBytes = in.skipBytes(bytesToSkip);
