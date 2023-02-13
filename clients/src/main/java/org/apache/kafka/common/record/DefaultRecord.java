@@ -20,7 +20,7 @@ import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.ChunkedDataInput;
+import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.Utils;
 
 import java.io.DataOutputStream;
@@ -271,7 +271,7 @@ public class DefaultRecord implements Record {
         return result;
     }
 
-    public static DefaultRecord readFrom(ChunkedDataInput input,
+    public static DefaultRecord readFrom(BytesStream input,
                                          long baseOffset,
                                          long baseTimestamp,
                                          int baseSequence,
@@ -360,7 +360,7 @@ public class DefaultRecord implements Record {
         }
     }
 
-    public static PartialDefaultRecord readPartiallyFrom(ChunkedDataInput input,
+    public static PartialDefaultRecord readPartiallyFrom(BytesStream input,
                                                          long baseOffset,
                                                          long baseTimestamp,
                                                          int baseSequence,
@@ -372,7 +372,7 @@ public class DefaultRecord implements Record {
             baseSequence, logAppendTime);
     }
 
-    private static PartialDefaultRecord readPartiallyFrom(ChunkedDataInput input,
+    private static PartialDefaultRecord readPartiallyFrom(BytesStream input,
                                                           int sizeInBytes,
                                                           long baseOffset,
                                                           long baseTimestamp,
@@ -427,7 +427,7 @@ public class DefaultRecord implements Record {
      * No-op for case where bytesToSkip <= 0. This could occur for cases where field is expected to be null.
      * @throws  InvalidRecordException if the number of bytes could not be skipped.
      */
-    private static void skipBytes(ChunkedDataInput in, int bytesToSkip) throws IOException {
+    private static void skipBytes(BytesStream in, int bytesToSkip) throws IOException {
         if (bytesToSkip <= 0) return;
 
         long skippedBytes = in.skipBytes(bytesToSkip);

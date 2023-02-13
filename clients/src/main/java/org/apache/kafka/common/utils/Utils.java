@@ -1198,7 +1198,7 @@ public final class Utils {
      *
      * @throws IOException If an I/O error occurs
      */
-    public static void readFully(ChunkedDataInput inputStream, ByteBuffer destinationBuffer) throws IOException {
+    public static void readFully(BytesStream inputStream, ByteBuffer destinationBuffer) throws IOException {
         if (!destinationBuffer.hasArray())
             throw new IllegalArgumentException("destinationBuffer must be backed by an array");
         int initialOffset = destinationBuffer.arrayOffset() + destinationBuffer.position();

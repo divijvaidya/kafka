@@ -23,7 +23,7 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.ChunkedDataInput;
+import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Crc32C;
 
@@ -268,14 +268,14 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return buffer.getInt(PARTITION_LEADER_EPOCH_OFFSET);
     }
 
-    public ChunkedDataInput recordInputStream(BufferSupplier bufferSupplier) {
+    public BytesStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
         return compressionType().wrapForInput(buffer, magic(), bufferSupplier);
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
-        final ChunkedDataInput inputStream = recordInputStream(bufferSupplier);
+        final BytesStream inputStream = recordInputStream(bufferSupplier);
 
         if (skipKeyValue) {
             return new StreamRecordIterator(inputStream) {
@@ -620,9 +620,9 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     // visible for testing
     abstract class StreamRecordIterator extends RecordIterator {
-        private final ChunkedDataInput inputStream;
+        private final BytesStream inputStream;
 
-        StreamRecordIterator(ChunkedDataInput inputStream) {
+        StreamRecordIterator(BytesStream inputStream) {
             super();
             this.inputStream = inputStream;
         }

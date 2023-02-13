@@ -22,8 +22,8 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
- * ChunkedDataInputStream is a stream which reads from source stream in chunks of configurable size. The
- * implementation of this stream is optimized to reduce the number of calls to sourceStream#read(). This works best in
+ * ChunkedBytesStream is a ByteReader which reads from source stream in chunks of configurable size. The
+ * implementation of this reader is optimized to reduce the number of calls to sourceStream#read(). This works best in
  * scenarios where sourceStream#read() call is expensive, e.g. when the call crosses JNI boundary.
  * <p>
  * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
@@ -39,7 +39,7 @@ import java.nio.ByteBuffer;
  * - the implementation of this class is performance sensitive. Minor changes as usage of ByteBuffer instead of byte[]
  *   can significantly impact performance, hence, proceed with caution.
  */
-public class ChunkedDataInputStream implements ChunkedDataInput {
+public class ChunkedBytesStream implements BytesStream {
     /**
      * Supplies the ByteBuffer which is used as intermediate buffer to store the chunk of output data.
      */
@@ -49,7 +49,7 @@ public class ChunkedDataInputStream implements ChunkedDataInput {
      */
     private InputStream sourceStream;
     /**
-     * Intermediate buffer to store the chunk of output data. The ChunkedDataInputStream is considered closed if
+     * Intermediate buffer to store the chunk of output data. The ChunkedBytesStream is considered closed if
      * this buffer is null.
      */
     private byte[] intermediateBuf;
@@ -65,7 +65,7 @@ public class ChunkedDataInputStream implements ChunkedDataInput {
     private ByteBuffer intermediateBufRef;
 
 
-    public ChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
+    public ChunkedBytesStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         this.bufferSupplier = bufferSupplier;
         this.sourceStream = sourceStream;
         intermediateBufRef = bufferSupplier.get(intermediateBufSize);

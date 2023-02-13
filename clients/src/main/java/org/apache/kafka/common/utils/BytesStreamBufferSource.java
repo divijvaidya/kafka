@@ -21,10 +21,10 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
-public class ChunkedDataBufferStream implements ChunkedDataInput {
+public class BytesStreamBufferSource implements BytesStream {
     final private ByteBuffer buf;
 
-    public ChunkedDataBufferStream(final ByteBuffer buffer) {
+    public BytesStreamBufferSource(final ByteBuffer buffer) {
         // we do not modify the markers of source buffer
         buf = buffer.duplicate();
     }

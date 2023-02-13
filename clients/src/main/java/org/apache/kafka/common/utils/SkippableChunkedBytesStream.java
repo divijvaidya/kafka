@@ -20,16 +20,16 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * SkippableChunkedDataInputStream is a variant of ChunkedDataInputStream which does not push skip() to the sourceStream.
+ * SkippableChunkedBytesStream is a variant of ChunkedBytesStream which does not push skip() to the sourceStream.
  * <p>
- * Unlike BufferedInputStream.skip() and ChunkedDataInputStream.skip(), this does not push skip() to sourceStream.
+ * Unlike BufferedInputStream.skip() and ChunkedBytesStream.skip(), this does not push skip() to sourceStream.
  * We want to avoid pushing this to sourceStream because it's implementation maybe inefficient, e.g. the case of Z
  * stdInputStream which allocates a new buffer from buffer pool, per skip call.
  *
- * @see ChunkedDataInputStream
+ * @see ChunkedBytesStream
  */
-public class SkippableChunkedDataInputStream extends ChunkedDataInputStream {
-    public SkippableChunkedDataInputStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
+public class SkippableChunkedBytesStream extends ChunkedBytesStream {
+    public SkippableChunkedBytesStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
         super(sourceStream, bufferSupplier, intermediateBufSize);
     }
 

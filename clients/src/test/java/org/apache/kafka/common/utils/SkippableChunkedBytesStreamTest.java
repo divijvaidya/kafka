@@ -27,7 +27,8 @@ import java.util.Random;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-public class SkippableChunkedDataInputStreamTest {
+
+public class SkippableChunkedBytesStreamTest {
     private static final Random RANDOM = new Random(1337);
     private final BufferSupplier supplier = BufferSupplier.NO_CACHING;
 
@@ -37,7 +38,7 @@ public class SkippableChunkedDataInputStreamTest {
         int expectedInpLeftAfterSkip = inputBuf.remaining() - bytesToPreRead - numBytesToSkip;
         int expectedSkippedBytes = Math.min(inputBuf.remaining() - bytesToPreRead, numBytesToSkip);
 
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10)) {
             int cnt = 0;
             while (cnt++ < bytesToPreRead) {
                 is.readByte();
@@ -60,7 +61,7 @@ public class SkippableChunkedDataInputStreamTest {
         RANDOM.nextBytes(inputBuf.array());
         inputBuf.rewind();
 
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
             int res = is.skipBytes(inputBuf.capacity() + 1);
             assertEquals(inputBuf.capacity(), res);
         }

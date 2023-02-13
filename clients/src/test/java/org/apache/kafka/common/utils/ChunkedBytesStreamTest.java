@@ -36,7 +36,7 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.stream.Stream;
 
-public class ChunkedDataInputStreamTest {
+public class ChunkedBytesStreamTest {
     private static final Random RANDOM = new Random(1337);
     private final BufferSupplier supplier = BufferSupplier.NO_CACHING;
 
@@ -45,7 +45,7 @@ public class ChunkedDataInputStreamTest {
         ByteBuffer input = ByteBuffer.allocate(8);
         int lengthGreaterThanInput = input.capacity() + 1;
         byte[] got = new byte[lengthGreaterThanInput];
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
             assertEquals(-1, is.read(got, 0, got.length), "Should return -1 signifying end of input");
         }
     }
@@ -54,7 +54,7 @@ public class ChunkedDataInputStreamTest {
     @MethodSource("provideSourceBytebuffersForTest")
     public void readFully_testCorrectness(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
             // perform a 2 pass read. this tests the scenarios where one pass may lead to partially consumed
             // intermediate buffer
             int toRead = RANDOM.nextInt(got.length);
@@ -68,7 +68,7 @@ public class ChunkedDataInputStreamTest {
     @MethodSource("provideSourceBytebuffersForTest")
     public void readByte_testCorrectness(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
             int i = 0;
             while (i < got.length) {
                 got[i++] = is.readByte();
@@ -81,7 +81,7 @@ public class ChunkedDataInputStreamTest {
     public void readByte_testEofError() throws IOException {
         ByteBuffer input = ByteBuffer.allocate(8);
         int lengthGreaterThanInput = input.capacity() + 1;
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
             assertThrows(EOFException.class, () -> {
                 int i = 0;
                 while (i++ < lengthGreaterThanInput) {
@@ -100,7 +100,7 @@ public class ChunkedDataInputStreamTest {
         }
         int[] got = new int[inputArr.length];
         inputBuf.rewind();
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
             int i = 0;
             while (i < got.length) {
                 got[i++] = is.read();
@@ -114,7 +114,7 @@ public class ChunkedDataInputStreamTest {
         ByteBuffer inputBuf = ByteBuffer.allocate(2);
         int lengthGreaterThanInput = inputBuf.capacity() + 1;
 
-        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
             int cnt = 0;
             while (cnt++ < lengthGreaterThanInput) {
                 int res = is.read();
@@ -132,7 +132,7 @@ public class ChunkedDataInputStreamTest {
         inputBuf.rewind();
 
         final InputStream sourcestream = spy(new ByteBufferInputStream(inputBuf));
-        try (ChunkedDataInput is = new ChunkedDataInputStream(sourcestream, supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10)) {
             // fill up intermediate buffer
             is.read(); // now we should have 10 - 1 = 9 bytes in intermediate buffer
 
@@ -150,7 +150,7 @@ public class ChunkedDataInputStreamTest {
         inputBuf.rewind();
 
         final InputStream sourcestream = spy(new ByteBufferInputStream(inputBuf));
-        try (ChunkedDataInput is = new ChunkedDataInputStream(sourcestream, supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10)) {
             int res = is.skipBytes(inputBuf.capacity() + 1);
             assertEquals(inputBuf.capacity(), res);
         }

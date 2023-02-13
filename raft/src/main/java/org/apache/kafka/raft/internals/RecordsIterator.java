@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.raft.internals;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -35,7 +34,7 @@ import org.apache.kafka.common.record.MutableRecordBatch;
 import org.apache.kafka.common.record.Records;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.ChunkedDataInput;
+import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.raft.Batch;
 import org.apache.kafka.server.common.serialization.RecordSerde;
@@ -216,7 +215,7 @@ public final class RecordsIterator<T> implements Iterator<Batch<T>>, AutoCloseab
             }
 
             List<T> records = new ArrayList<>(numRecords);
-            ChunkedDataInput input = batch.recordInputStream(bufferSupplier);
+            BytesStream input = batch.recordInputStream(bufferSupplier);
             try {
                 for (int i = 0; i < numRecords; i++) {
                     T record = readRecord(input, batch.sizeInBytes());
@@ -238,11 +237,11 @@ public final class RecordsIterator<T> implements Iterator<Batch<T>>, AutoCloseab
         return result;
     }
 
-    private T readRecord(ChunkedDataInput stream, int totalBatchSize) {
+    private T readRecord(BytesStream bytesStream, int totalBatchSize) {
         // Read size of body in bytes
         int size;
         try {
-            size = ByteUtils.readVarint(stream);
+            size = ByteUtils.readVarint(bytesStream);
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read record size", e);
         }
@@ -260,9 +259,10 @@ public final class RecordsIterator<T> implements Iterator<Batch<T>>, AutoCloseab
         buf.limit(size - 1);
 
         try {
-            stream.readFully(buf.array(), 0, size);
-        } catch (EOFException e) {
-            throw new RuntimeException("Unable to read " + size + " bytes, only read " + bytesRead);
+            int bytesRead = bytesStream.read(buf.array(), 0, size);
+            if (bytesRead != size) {
+                throw new RuntimeException("Unable to read " + size + " bytes, only read " + bytesRead);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read record bytes", e);
         }

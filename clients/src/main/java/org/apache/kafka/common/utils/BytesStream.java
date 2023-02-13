@@ -22,27 +22,27 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * The ChunkedDataInput interface provides for reading bytes from an underlying source. The source could be a buffer
- * or a stream. It extends the {@link Closeable} interface to ensure that the source is appropriately closed (if required).
+ * This interface provides for reading bytes from an underlying source. The source could be a buffer or a stream.
+ * It extends the {@link Closeable} interface to ensure that the source is appropriately closed (if required).
  */
-public interface ChunkedDataInput extends Closeable {
+public interface BytesStream extends Closeable {
     /**
-     * The interface is based on {@link InputStream#read()} and follows it's contract.
+     * The interface is based on {@link InputStream#read()} and follows the same contract.
      */
     int read() throws IOException;
 
     /**
-     * The interface is based on {@link DataInput#skipBytes(int)} and follows it's contract.
+     * The interface is based on {@link DataInput#skipBytes(int)} and follows the same contract.
      */
     int skipBytes(int toSkip) throws IOException;
 
     /**
-     * The interface is based on {@link InputStream#read(byte[], int, int)} and follows it's contract.
+     * The interface is based on {@link InputStream#read(byte[], int, int)} and follows the same contract.
      */
     int read(byte[] b, int off, int len) throws IOException;
 
     /**
-     * The interface is based on {@link DataInput#readByte()} and follows it's contract.
+     * The interface is based on {@link DataInput#readByte()} and follows the same contract.
      */
     byte readByte() throws IOException;
 }

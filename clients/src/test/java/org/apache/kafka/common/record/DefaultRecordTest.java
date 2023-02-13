@@ -21,8 +21,8 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.ChunkedDataBufferStream;
-import org.apache.kafka.common.utils.ChunkedDataInput;
+import org.apache.kafka.common.utils.BytesStreamBufferSource;
+import org.apache.kafka.common.utils.BytesStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -177,7 +177,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
@@ -222,7 +222,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
@@ -281,7 +281,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
@@ -328,7 +328,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
@@ -375,7 +375,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
@@ -426,7 +426,7 @@ public class DefaultRecordTest {
         buf.position(buf.limit());
 
         buf.flip();
-        ChunkedDataInput inputStream = new ChunkedDataBufferStream(buf);
+        BytesStream inputStream = new BytesStreamBufferSource(buf);
         assertThrows(InvalidRecordException.class,
             () -> DefaultRecord.readPartiallyFrom(inputStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
     }
