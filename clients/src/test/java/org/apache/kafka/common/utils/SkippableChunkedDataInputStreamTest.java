@@ -21,9 +21,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.io.DataInput;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.stream.Stream;
@@ -39,19 +37,19 @@ public class SkippableChunkedDataInputStreamTest {
         int expectedInpLeftAfterSkip = inputBuf.remaining() - bytesToPreRead - numBytesToSkip;
         int expectedSkippedBytes = Math.min(inputBuf.remaining() - bytesToPreRead, numBytesToSkip);
 
-        try (InputStream is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10)) {
+        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10)) {
             int cnt = 0;
             while (cnt++ < bytesToPreRead) {
-                ((DataInput) is).readByte();
+                is.readByte();
             }
 
-            int res = ((DataInput) is).skipBytes(numBytesToSkip);
+            int res = is.skipBytes(numBytesToSkip);
             assertEquals(expectedSkippedBytes, res);
 
             // verify that we are able to read rest of the input
             cnt = 0;
             while (cnt++ < expectedInpLeftAfterSkip) {
-                ((DataInput) is).readByte();
+                is.readByte();
             }
         }
     }
@@ -62,8 +60,8 @@ public class SkippableChunkedDataInputStreamTest {
         RANDOM.nextBytes(inputBuf.array());
         inputBuf.rewind();
 
-        try (InputStream is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
-            int res = ((DataInput) is).skipBytes(inputBuf.capacity() + 1);
+        try (ChunkedDataInput is = new ChunkedDataInputStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+            int res = is.skipBytes(inputBuf.capacity() + 1);
             assertEquals(inputBuf.capacity(), res);
         }
     }

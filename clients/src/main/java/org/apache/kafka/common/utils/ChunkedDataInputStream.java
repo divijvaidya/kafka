@@ -16,7 +16,6 @@
  */
 package org.apache.kafka.common.utils;
 
-import java.io.DataInput;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,7 +39,7 @@ import java.nio.ByteBuffer;
  * - the implementation of this class is performance sensitive. Minor changes as usage of ByteBuffer instead of byte[]
  *   can significantly impact performance, hence, proceed with caution.
  */
-public class ChunkedDataInputStream extends InputStream implements DataInput {
+public class ChunkedDataInputStream implements ChunkedDataInput {
     /**
      * Supplies the ByteBuffer which is used as intermediate buffer to store the chunk of output data.
      */
@@ -134,58 +133,24 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     }
 
     @Override
-    public long skip(long toSkipBytes) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int available() throws IOException {
-        int n = limit - pos;
-        int avail = getInIfOpen().available();
-        return n > (Integer.MAX_VALUE - avail)
-            ? Integer.MAX_VALUE
-            : n + avail;
-    }
-
-    @Override
-    public boolean markSupported() {
-        return false;
-    }
-
-    @Override
-    public void mark(int readlimit) {
-        throw new RuntimeException("mark not supported");
-    }
-
-    @Override
-    public void reset() {
-        throw new RuntimeException("reset not supported");
-    }
-
-    @Override
-    public void readFully(byte[] b) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void readFully(byte[] b, int off, int len) throws IOException {
+    public int read(byte[] b, int off, int len) throws IOException {
         if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
             throw new IndexOutOfBoundsException();
         } else if (len == 0) {
-            return;
+            return 0;
         }
 
-        int bytesRead = 0;
         int totalRead = 0;
-        int toRead;
+        int bytesRead = 0;
         while (totalRead < len) {
             bytesRead = 0;
-            toRead = len - totalRead;
+            int toRead = len - totalRead;
             if (pos >= limit) {
-                toRead = len - totalRead;
                 if (toRead >= getBufIfOpen().length) {
                     // don't use intermediate buffer if we need to read more than it's capacity
                     bytesRead = getInIfOpen().read(b, off + totalRead, toRead);
+                    if (bytesRead < 0)
+                        break;
                 } else {
                     fill();
                     if (pos >= limit)
@@ -199,14 +164,13 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
                 bytesRead = toRead;
             }
 
-            if (bytesRead < 0)
-                break;
-
             totalRead += bytesRead;
         }
 
         if ((bytesRead <= 0) && (totalRead < len))
-            throw new EOFException();
+            return -1;
+
+        return totalRead;
     }
 
     @Override
@@ -231,11 +195,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
     }
 
     @Override
-    public boolean readBoolean() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public byte readByte() throws IOException {
         if (pos >= limit) {
             fill();
@@ -243,56 +202,6 @@ public class ChunkedDataInputStream extends InputStream implements DataInput {
                 throw new EOFException();
         }
         return getBufIfOpen()[pos++];
-    }
-
-    @Override
-    public int readUnsignedByte() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public short readShort() throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int readUnsignedShort() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public char readChar() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int readInt() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public long readLong() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public float readFloat() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public double readDouble() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String readLine() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public String readUTF() {
-        throw new UnsupportedOperationException();
     }
 
     // visible for testing

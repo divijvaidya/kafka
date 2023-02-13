@@ -52,8 +52,7 @@ public class CompressionTypeTest {
 
         buffer.rewind();
 
-        ChunkedDataInputStream in = (ChunkedDataInputStream) CompressionType.LZ4.wrapForInput(
-                buffer, RecordBatch.MAGIC_VALUE_V1, BufferSupplier.create());
+        ChunkedDataInputStream in = (ChunkedDataInputStream) CompressionType.LZ4.wrapForInput(buffer, RecordBatch.MAGIC_VALUE_V1, BufferSupplier.create());
         assertFalse(((KafkaLZ4BlockInputStream) in.getSourceStream()).ignoreFlagDescriptorChecksum());
     }
 }

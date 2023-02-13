@@ -173,7 +173,7 @@ public final class ByteUtils {
      * @throws IllegalArgumentException if variable-length value does not terminate after 5 bytes have been read
      * @throws IOException              if {@link DataInput} throws {@link IOException}
      */
-    public static int readUnsignedVarint(DataInput in) throws IOException {
+    public static int readUnsignedVarint(ChunkedDataInput in) throws IOException {
         int value = 0;
         int i = 0;
         int b;
@@ -211,7 +211,7 @@ public final class ByteUtils {
      * @throws IllegalArgumentException if variable-length value does not terminate after 5 bytes have been read
      * @throws IOException              if {@link DataInput} throws {@link IOException}
      */
-    public static int readVarint(DataInput in) throws IOException {
+    public static int readVarint(ChunkedDataInput in) throws IOException {
         int value = readUnsignedVarint(in);
         return (value >>> 1) ^ -(value & 1);
     }
@@ -226,7 +226,7 @@ public final class ByteUtils {
      * @throws IllegalArgumentException if variable-length value does not terminate after 10 bytes have been read
      * @throws IOException              if {@link DataInput} throws {@link IOException}
      */
-    public static long readVarlong(DataInput in) throws IOException {
+    public static long readVarlong(ChunkedDataInput in) throws IOException {
         long value = 0L;
         int i = 0;
         long b;
