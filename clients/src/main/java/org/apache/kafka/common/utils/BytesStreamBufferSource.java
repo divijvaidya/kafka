@@ -21,6 +21,9 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
+/**
+ * Provides a BytesStream wrapper over a buffer.
+ */
 public class BytesStreamBufferSource implements BytesStream {
     final private ByteBuffer buf;
 

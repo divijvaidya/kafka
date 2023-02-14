@@ -282,6 +282,8 @@ public class DefaultRecord implements Record {
         if (bytesRead == -1)
             throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
                 " bytes in record payload, but the record payload reached EOF.");
+        recordBuffer.position(recordBuffer.position() + bytesRead);
+        recordBuffer.flip(); // prepare for reading
 
         int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
         return readFrom(recordBuffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
