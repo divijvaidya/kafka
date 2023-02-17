@@ -17,18 +17,14 @@
 
 package org.apache.kafka.common.compress;
 
-import com.github.luben.zstd.BufferPool;
 import com.github.luben.zstd.RecyclingBufferPool;
 import com.github.luben.zstd.ZstdBufferDecompressingStreamNoFinalizer;
-import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.utils.BufferSupplier;
-import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
 import java.io.BufferedOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -50,35 +46,39 @@ public class ZstdFactory {
 
     public static InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
         try {
-            // We use our own BufferSupplier instead of com.github.luben.zstd.RecyclingBufferPool since our
-            // implementation doesn't require locking or soft references.The buffer allocated by this buffer pool is
-            // used by zstd-jni for 1\ reading compressed data from input stream into a buffer before passing it over JNI
-            // 2\ implementation of skip inside zstd-jni where buffer is obtained and released with every call
-            BufferPool bufferPool = new BufferPool() {
-                @Override
-                public ByteBuffer get(int capacity) {
-                    return decompressionBufferSupplier.get(capacity);
-                }
-
-                @Override
-                public void release(ByteBuffer buffer) {
-                    decompressionBufferSupplier.release(buffer);
-                }
-            };
-            // We do not use an intermediate buffer to store the decompressed data as a result of JNI read() calls using
-            // `ZstdInputStreamNoFinalizer` here. Every read() call to `ZstdInputStreamNoFinalizer` will be a JNI call
-            // and the caller is expected to balance the tradeoff between reading large amount of data vs. making
-            // multiple JNI calls.
+            /*
+             * The responsibility of closing the stream is pushed to the caller of this method.
+             */
             final ZstdBufferDecompressingStreamNoFinalizer stream =  new ZstdBufferDecompressingStreamNoFinalizer(buffer);
             return new InputStream() {
                 @Override
                 public int read() throws IOException {
-                    return stream.read();
-                }
+                    // prevent a call to underlying stream if no data is remaining
+                    if (!stream.hasRemaining())
+                        return -1;
 
+                    ByteBuffer a = ByteBuffer.allocate(1);
+                    int res = stream.read(a);
+                    if (res <= 0) {
+                        return -1;
+                    }
+                    return Byte.toUnsignedInt(a.get());
+                }
                 @Override
                 public int read(byte[] b, int off, int len) throws IOException {
-                    return stream.read(b, 0, len);
+                    // prevent a call to underlying stream if no data is remaining
+                    if (!stream.hasRemaining())
+                        return -1;
+
+                    int res = stream.read(ByteBuffer.wrap(b, off, len));
+                    if (res <= 0) {
+                        return -1;
+                    }
+                    return res;
+                }
+                @Override
+                public void close() {
+                    stream.close();
                 }
             };
         } catch (Throwable e) {
