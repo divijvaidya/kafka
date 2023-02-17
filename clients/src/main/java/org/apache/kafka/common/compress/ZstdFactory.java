@@ -19,6 +19,7 @@ package org.apache.kafka.common.compress;
 
 import com.github.luben.zstd.BufferPool;
 import com.github.luben.zstd.RecyclingBufferPool;
+import com.github.luben.zstd.ZstdBufferDecompressingStreamNoFinalizer;
 import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;
 import org.apache.kafka.common.KafkaException;
@@ -27,6 +28,8 @@ import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 
 import java.io.BufferedOutputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -66,7 +69,18 @@ public class ZstdFactory {
             // `ZstdInputStreamNoFinalizer` here. Every read() call to `ZstdInputStreamNoFinalizer` will be a JNI call
             // and the caller is expected to balance the tradeoff between reading large amount of data vs. making
             // multiple JNI calls.
-            return new ZstdInputStreamNoFinalizer(new ByteBufferInputStream(buffer), bufferPool);
+            final ZstdBufferDecompressingStreamNoFinalizer stream =  new ZstdBufferDecompressingStreamNoFinalizer(buffer);
+            return new InputStream() {
+                @Override
+                public int read() throws IOException {
+                    return stream.read();
+                }
+
+                @Override
+                public int read(byte[] b, int off, int len) throws IOException {
+                    return stream.read(b, 0, len);
+                }
+            };
         } catch (Throwable e) {
             throw new KafkaException(e);
         }
