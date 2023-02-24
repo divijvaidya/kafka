@@ -421,6 +421,69 @@ public final class ByteUtils {
         return leadingZerosBelow38DividedBy7 + (leadingZeros >>> 5);
     }
 
+    public static int sizeOfUnsignedVarintNew(int value) {
+        if ((value & (~0 << 7)) == 0) {
+            return 1;
+        }
+        if ((value & (~0 << 14)) == 0) {
+            return 2;
+        }
+        if ((value & (~0 << 21)) == 0) {
+            return 3;
+        }
+        if ((value & (~0 << 28)) == 0) {
+            return 4;
+        }
+        return 5;
+    }
+
+    public static int sizeOfUnsignedVarlongNew(long value) {
+        // handle two popular special cases up front ...
+        if ((value & (~0L << 7)) == 0L) {
+            return 1;
+        }
+        if (value < 0L) {
+            return 10;
+        }
+        // ... leaving us with 8 remaining, which we can divide and conquer
+        int n = 2;
+        if ((value & (~0L << 35)) != 0L) {
+            n += 4;
+            value >>>= 28;
+        }
+        if ((value & (~0L << 21)) != 0L) {
+            n += 2;
+            value >>>= 14;
+        }
+        if ((value & (~0L << 14)) != 0L) {
+            n += 1;
+        }
+        return n;
+    }
+    public static int sizeOfUnsignedVarlong(long value) {
+        // handle two popular special cases up front ...
+        if ((value & (~0L << 7)) == 0L) {
+            return 1;
+        }
+        if (value < 0L) {
+            return 10;
+        }
+        // ... leaving us with 8 remaining, which we can divide and conquer
+        int n = 2;
+        if ((value & (~0L << 35)) != 0L) {
+            n += 4;
+            value >>>= 28;
+        }
+        if ((value & (~0L << 21)) != 0L) {
+            n += 2;
+            value >>>= 14;
+        }
+        if ((value & (~0L << 14)) != 0L) {
+            n += 1;
+        }
+        return n;
+    }
+
     /**
      * Number of bytes needed to encode an integer in variable-length format.
      *
@@ -438,14 +501,7 @@ public final class ByteUtils {
      */
     public static int sizeOfVarlong(long value) {
         long v = (value << 1) ^ (value >> 63);
-
-        // For implementation notes @see #sizeOfUnsignedVarint(int)
-        // Similar logic is applied to allow for 64bit input -> 1-9byte output.
-        // return (70 - leadingZeros) / 7 + leadingZeros / 64;
-
-        int leadingZeros = Long.numberOfLeadingZeros(v);
-        int leadingZerosBelow70DividedBy7 = ((70 - leadingZeros) * 0b10010010010010011) >>> 19;
-        return leadingZerosBelow70DividedBy7 + (leadingZeros >>> 6);
+        return sizeOfUnsignedVarlong(v);
     }
 
     private static IllegalArgumentException illegalVarintException(int value) {

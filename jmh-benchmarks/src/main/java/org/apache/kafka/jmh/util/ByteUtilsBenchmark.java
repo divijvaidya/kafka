@@ -55,30 +55,18 @@ public class ByteUtilsBenchmark {
     }
 
     @Benchmark
-    public int testSizeOfUnsignedVarintSimple() {
-        int value = inputInt;
-        int bytes = 1;
-        while ((value & 0xffffff80) != 0L) {
-            bytes += 1;
-            value >>>= 7;
-        }
-        return bytes;
+    public int testSizeOfUnsignedVarintNew() {
+        return ByteUtils.sizeOfUnsignedVarintNew(inputInt);
     }
 
     @Benchmark
     public int testSizeOfVarlong() {
-        return ByteUtils.sizeOfVarlong(inputLong);
+        return ByteUtils.sizeOfUnsignedVarlong(inputLong);
     }
 
     @Benchmark
-    public int testSizeOfVarlongSimple() {
-        long v = (inputLong << 1) ^ (inputLong >> 63);
-        int bytes = 1;
-        while ((v & 0xffffffffffffff80L) != 0L) {
-            bytes += 1;
-            v >>>= 7;
-        }
-        return bytes;
+    public int testSizeOfVarlongNew() {
+        return ByteUtils.sizeOfUnsignedVarlongNew(inputLong);
     }
 
     public static void main(String[] args) throws RunnerException {
