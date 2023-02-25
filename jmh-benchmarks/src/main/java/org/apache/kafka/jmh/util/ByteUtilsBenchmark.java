@@ -37,21 +37,28 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 @State(Scope.Benchmark)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@OutputTimeUnit(TimeUnit.SECONDS)
 @Fork(3)
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 10, time = 1)
 public class ByteUtilsBenchmark {
     static final int DATA_SET_SAMPLE_SIZE = 1024 * 1024;
-    static final Random RANDOM = new Random(1337);
     int[] random_ints;
     long[] random_longs;
+    Random random;
+
     @Setup(Level.Trial)
-    public void setUp() {
-        random_ints = RANDOM.ints(DATA_SET_SAMPLE_SIZE).toArray();
-        random_longs = RANDOM.longs(DATA_SET_SAMPLE_SIZE).toArray();
+    public void setUpBenchmarkLevel() {
+        // Initialize the random number generator with a seed so that for each benchmark it produces the same sequence
+        // of random numbers. Note that it is important to initialize it again with the seed before every benchmark.
+        random = new Random(1337);
     }
 
+    @Setup(Level.Iteration)
+    public void setUp() {
+        random_ints = random.ints(DATA_SET_SAMPLE_SIZE).toArray();
+        random_longs = random.longs(DATA_SET_SAMPLE_SIZE).toArray();
+    }
 
     @Benchmark
     public void testSizeOfUnsignedVarint(Blackhole bk) {
