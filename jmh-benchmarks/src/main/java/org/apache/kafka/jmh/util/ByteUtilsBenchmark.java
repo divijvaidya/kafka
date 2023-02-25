@@ -17,7 +17,7 @@
 
 package org.apache.kafka.jmh.util;
 
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.common.utils.ByteUtils;
@@ -30,6 +30,7 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
@@ -41,32 +42,43 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 10, time = 1)
 public class ByteUtilsBenchmark {
-    private int inputInt;
-    private long inputLong;
-    @Setup(Level.Iteration)
+    static final int DATA_SET_SAMPLE_SIZE = 1024 * 1024;
+    static final Random RANDOM = new Random(1337);
+    int[] random_ints;
+    long[] random_longs;
+    @Setup(Level.Trial)
     public void setUp() {
-        inputInt = ThreadLocalRandom.current().nextInt();
-        inputLong = ThreadLocalRandom.current().nextLong();
+        random_ints = RANDOM.ints(DATA_SET_SAMPLE_SIZE).toArray();
+        random_longs = RANDOM.longs(DATA_SET_SAMPLE_SIZE).toArray();
+    }
+
+
+    @Benchmark
+    public void testSizeOfUnsignedVarint(Blackhole bk) {
+        for (int random_value : this.random_ints) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarint(random_value));
+        }
     }
 
     @Benchmark
-    public int testSizeOfUnsignedVarint() {
-        return ByteUtils.sizeOfUnsignedVarint(inputInt);
+    public void testSizeOfUnsignedVarintNew(Blackhole bk) {
+        for (int random_value : this.random_ints) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarintNew(random_value));
+        }
     }
 
     @Benchmark
-    public int testSizeOfUnsignedVarintNew() {
-        return ByteUtils.sizeOfUnsignedVarintNew(inputInt);
+    public void testSizeOfVarlong(Blackhole bk) {
+        for (long random_value : this.random_longs) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarlong(random_value));
+        }
     }
 
     @Benchmark
-    public int testSizeOfVarlong() {
-        return ByteUtils.sizeOfUnsignedVarlong(inputLong);
-    }
-
-    @Benchmark
-    public int testSizeOfVarlongNew() {
-        return ByteUtils.sizeOfUnsignedVarlongNew(inputLong);
+    public void testSizeOfVarlongNew(Blackhole bk) {
+        for (long random_value : this.random_longs) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarlongNew(random_value));
+        }
     }
 
     public static void main(String[] args) throws RunnerException {
