@@ -18,9 +18,11 @@ package org.apache.kafka.common.utils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
 /**
@@ -147,20 +149,40 @@ public final class ByteUtils {
      * @param buffer The buffer to read from
      * @return The integer read
      *
-     * @throws IllegalArgumentException if variable-length value does not terminate after 5 bytes have been read
+     * @throws IllegalArgumentException if the buffer does not contain sufficient data to read the variable integer OR
+     *                                  if the variable integer is malformed
      */
     public static int readUnsignedVarint(ByteBuffer buffer) {
-        int value = 0;
-        int i = 0;
-        int b;
-        while (((b = buffer.get()) & 0x80) != 0) {
-            value |= (b & 0x7f) << i;
-            i += 7;
-            if (i > 28)
-                throw illegalVarintException(value);
+        try {
+            byte tmp = buffer.get();
+            if (tmp >= 0) {
+                return tmp;
+            } else {
+                int result = tmp & 127;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= tmp << 7;
+                } else {
+                    result |= (tmp & 127) << 7;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= tmp << 14;
+                    } else {
+                        result |= (tmp & 127) << 14;
+                        if ((tmp = buffer.get()) >= 0) {
+                            result |= tmp << 21;
+                        } else {
+                            result |= (tmp & 127) << 21;
+                            result |= (tmp = buffer.get()) << 28;
+                            if (tmp < 0) {
+                                throw illegalVarintException(result);
+                            }
+                        }
+                    }
+                }
+                return result;
+            }
+        } catch (BufferUnderflowException e) {
+            throw new IllegalArgumentException("Input buffer does not contain enough bytes to read a varint.");
         }
-        value |= b << i;
-        return value;
     }
 
     /**
@@ -173,18 +195,37 @@ public final class ByteUtils {
      * @throws IllegalArgumentException if variable-length value does not terminate after 5 bytes have been read
      * @throws IOException              if {@link DataInput} throws {@link IOException}
      */
-    public static int readUnsignedVarint(DataInput in) throws IOException {
-        int value = 0;
-        int i = 0;
-        int b;
-        while (((b = in.readByte()) & 0x80) != 0) {
-            value |= (b & 0x7f) << i;
-            i += 7;
-            if (i > 28)
-                throw illegalVarintException(value);
+    static int readUnsignedVarint(DataInput in) throws IOException {
+        try {
+            byte tmp = in.readByte();
+            if (tmp >= 0) {
+                return tmp;
+            } else {
+                int result = tmp & 127;
+                if ((tmp = in.readByte()) >= 0) {
+                    result |= tmp << 7;
+                } else {
+                    result |= (tmp & 127) << 7;
+                    if ((tmp = in.readByte()) >= 0) {
+                        result |= tmp << 14;
+                    } else {
+                        result |= (tmp & 127) << 14;
+                        if ((tmp = in.readByte()) >= 0) {
+                            result |= tmp << 21;
+                        } else {
+                            result |= (tmp & 127) << 21;
+                            result |= (tmp = in.readByte()) << 28;
+                            if (tmp < 0) {
+                                throw illegalVarintException(result);
+                            }
+                        }
+                    }
+                }
+                return result;
+            }
+        } catch (EOFException e) {
+            throw new IllegalArgumentException("Input stream does not contain enough bytes to read a varint.");
         }
-        value |= b << i;
-        return value;
     }
 
     /**
@@ -227,17 +268,66 @@ public final class ByteUtils {
      * @throws IOException              if {@link DataInput} throws {@link IOException}
      */
     public static long readVarlong(DataInput in) throws IOException {
-        long value = 0L;
-        int i = 0;
-        long b;
-        while (((b = in.readByte()) & 0x80) != 0) {
-            value |= (b & 0x7f) << i;
-            i += 7;
-            if (i > 63)
-                throw illegalVarlongException(value);
-        }
-        value |= b << i;
-        return (value >>> 1) ^ -(value & 1);
+        long raw = readUnsignedVarlong(in);
+        return (raw >>> 1) ^ -(raw & 1);
+    }
+
+    private static long readUnsignedVarlong(DataInput in) throws IOException {
+        try {
+            byte tmp = in.readByte();
+            if (tmp >= 0) {
+                return tmp;
+            } else {
+                long result = tmp & 0x7f;
+                if ((tmp = in.readByte()) >= 0) {
+                    result |= tmp << 7;
+                } else {
+                    result |= (tmp & 0x7f) << 7;
+                    if ((tmp = in.readByte()) >= 0) {
+                        result |= tmp << 14;
+                    } else {
+                        result |= (tmp & 0x7f) << 14;
+                        if ((tmp = in.readByte()) >= 0) {
+                            result |= tmp << 21;
+                        } else {
+                            result |= (tmp & 0x7f) << 21;
+                            if ((tmp = in.readByte()) >= 0) {
+                                result |= (long) tmp << 28;
+                            } else {
+                                result |= (long) (tmp & 0x7f) << 28;
+                                if ((tmp = in.readByte()) >= 0) {
+                                    result |= (long) tmp << 35;
+                                } else {
+                                    result |= (long) (tmp & 0x7f) << 35;
+                                    if ((tmp = in.readByte()) >= 0) {
+                                        result |= (long) tmp << 42;
+                                    } else {
+                                        result |= (long) (tmp & 0x7f) << 42;
+                                        if ((tmp = in.readByte()) >= 0) {
+                                            result |= (long) tmp << 49;
+                                        } else {
+                                            result |= (long) (tmp & 0x7f) << 49;
+                                            if ((tmp = in.readByte()) >= 0) {
+                                                result |= (long) tmp << 56;
+                                            } else {
+                                                result |= (long) (tmp & 0x7f) << 56;
+                                                result |= (long) (tmp = in.readByte()) << 63;
+                                                if (tmp < 0) {
+                                                    throw illegalVarlongException(result);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return result;
+            }
+        } catch (EOFException ex) {
+            throw new IllegalArgumentException("Input stream does not contain enough bytes to read a varlong.");
+        }    
     }
 
     /**
@@ -250,17 +340,67 @@ public final class ByteUtils {
      * @throws IllegalArgumentException if variable-length value does not terminate after 10 bytes have been read
      */
     public static long readVarlong(ByteBuffer buffer)  {
-        long value = 0L;
-        int i = 0;
-        long b;
-        while (((b = buffer.get()) & 0x80) != 0) {
-            value |= (b & 0x7f) << i;
-            i += 7;
-            if (i > 63)
-                throw illegalVarlongException(value);
+        long raw  = readUnsignedVarlong(buffer);
+        return (raw >>> 1) ^ -(raw & 1);
+    }
+
+    @SuppressWarnings("checkstyle:cyclomaticcomplexity")
+    public static long readUnsignedVarlong(ByteBuffer buffer)  {
+        try {
+            byte tmp = buffer.get();
+            if (tmp >= 0) {
+                return tmp;
+            } else {
+                long result = tmp & 0x7f;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= tmp << 7;
+                } else {
+                    result |= (tmp & 0x7f) << 7;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= tmp << 14;
+                    } else {
+                        result |= (tmp & 0x7f) << 14;
+                        if ((tmp = buffer.get()) >= 0) {
+                            result |= tmp << 21;
+                        } else {
+                            result |= (tmp & 0x7f) << 21;
+                            if ((tmp = buffer.get()) >= 0) {
+                                result |= (long) tmp << 28;
+                            } else {
+                                result |= (long) (tmp & 0x7f) << 28;
+                                if ((tmp = buffer.get()) >= 0) {
+                                    result |= (long) tmp << 35;
+                                } else {
+                                    result |= (long) (tmp & 0x7f) << 35;
+                                    if ((tmp = buffer.get()) >= 0) {
+                                        result |= (long) tmp << 42;
+                                    } else {
+                                        result |= (long) (tmp & 0x7f) << 42;
+                                        if ((tmp = buffer.get()) >= 0) {
+                                            result |= (long) tmp << 49;
+                                        } else {
+                                            result |= (long) (tmp & 0x7f) << 49;
+                                            if ((tmp = buffer.get()) >= 0) {
+                                                result |= (long) tmp << 56;
+                                            } else {
+                                                result |= (long) (tmp & 0x7f) << 56;
+                                                result |= (long) (tmp = buffer.get()) << 63;
+                                                if (tmp < 0) {
+                                                    throw illegalVarlongException(result);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return result;
+            }
+        } catch (BufferUnderflowException e) {
+            throw new IllegalArgumentException("Input buffer does not contain enough bytes to read a varint.");
         }
-        value |= b << i;
-        return (value >>> 1) ^ -(value & 1);
     }
 
     /**
@@ -292,29 +432,66 @@ public final class ByteUtils {
      * @param buffer The output to write to
      */
     public static void writeUnsignedVarint(int value, ByteBuffer buffer) {
-        while ((value & 0xffffff80) != 0L) {
-            byte b = (byte) ((value & 0x7f) | 0x80);
-            buffer.put(b);
-            value >>>= 7;
+        /*
+         * Implementation notes:
+         * This implementation performs optimizations over traditional loop implementation by unrolling
+         * the loop.
+         */
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) ((value >>> 7) & 0xFF));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) ((value >>> 14) & 0xFF));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) ((value >>> 21) & 0xFF));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        buffer.put((byte) ((value >>> 28) & 0xFF));
+                    }
+                }
+            }
         }
-        buffer.put((byte) value);
     }
 
     /**
      * Write the given integer following the variable-length unsigned encoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
      * into the buffer.
+     * 
+     * For implementation notes, see {@link #writeUnsignedVarint(int, ByteBuffer)}
      *
      * @param value The value to write
      * @param out The output to write to
      */
     public static void writeUnsignedVarint(int value, DataOutput out) throws IOException {
-        while ((value & 0xffffff80) != 0L) {
-            byte b = (byte) ((value & 0x7f) | 0x80);
-            out.writeByte(b);
-            value >>>= 7;
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            out.writeByte(value);
+        } else {
+            out.writeByte(value & 0x7F | 0x80);
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                out.writeByte(value >>> 7);
+            } else {
+                out.writeByte((value >>> 7) & 0x7F | 0x80);
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    out.writeByte(value >>> 14);
+                } else {
+                    out.writeByte((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        out.writeByte(value >>> 21);
+                    } else {
+                        out.writeByte((value >>> 21) & 0x7F | 0x80);
+                        out.writeByte(value >>> 28);
+                    }
+                }
+            }
         }
-        out.writeByte((byte) value);
     }
 
     /**
@@ -351,11 +528,52 @@ public final class ByteUtils {
      */
     public static void writeVarlong(long value, DataOutput out) throws IOException {
         long v = (value << 1) ^ (value >> 63);
-        while ((v & 0xffffffffffffff80L) != 0L) {
-            out.writeByte(((int) v & 0x7f) | 0x80);
-            v >>>= 7;
+        if ((v & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
+            out.writeByte((byte) v);
+        } else {
+            out.writeByte((byte) (v & 0x7F | 0x80));
+            if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+                out.writeByte((byte) (v >>> 7));
+            } else {
+                out.writeByte((byte) ((v >>> 7) & 0x7F | 0x80));
+                if ((v & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                    out.writeByte((byte) (v >>> 14));
+                } else {
+                    out.writeByte((byte) ((v >>> 14) & 0x7F | 0x80));
+                    if ((v & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                        out.writeByte((byte) (v >>> 21));
+                    } else {
+                        out.writeByte((byte) ((v >>> 21) & 0x7F | 0x80));
+                        if ((v & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            out.writeByte((byte) (v >>> 28));
+                        } else {
+                            out.writeByte((byte) ((v >>> 28) & 0x7F | 0x80));
+                            if ((v & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                out.writeByte((byte) (v >>> 35));
+                            } else {
+                                out.writeByte((byte) ((v >>> 35) & 0x7F | 0x80));
+                                if ((v & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    out.writeByte((byte) (v >>> 42));
+                                } else {
+                                    out.writeByte((byte) ((v >>> 42) & 0x7F | 0x80));
+                                    if ((v & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        out.writeByte((byte) (v >>> 49));
+                                    } else {
+                                        out.writeByte((byte) ((v >>> 49) & 0x7F | 0x80));
+                                        if ((v & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            out.writeByte((byte) (v >>> 56));
+                                        } else {
+                                            out.writeByte((byte) ((v >>> 56) & 0x7F | 0x80));
+                                            out.writeByte((byte) (v >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        out.writeByte((byte) v);
     }
 
     /**
@@ -368,12 +586,57 @@ public final class ByteUtils {
      */
     public static void writeVarlong(long value, ByteBuffer buffer) {
         long v = (value << 1) ^ (value >> 63);
-        while ((v & 0xffffffffffffff80L) != 0L) {
-            byte b = (byte) ((v & 0x7f) | 0x80);
-            buffer.put(b);
-            v >>>= 7;
+        writeUnsignedVarlong(v, buffer);
+    }
+
+    // visible for benchmarking
+    public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            buffer.put((byte) (value >>> 28));
+                        } else {
+                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
+                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                buffer.put((byte) (value >>> 35));
+                            } else {
+                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
+                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    buffer.put((byte) (value >>> 42));
+                                } else {
+                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
+                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        buffer.put((byte) (value >>> 49));
+                                    } else {
+                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
+                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            buffer.put((byte) (value >>> 56));
+                                        } else {
+                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
+                                            buffer.put((byte) (value >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        buffer.put((byte) v);
     }
 
     /**
@@ -437,8 +700,11 @@ public final class ByteUtils {
      * @see #sizeOfUnsignedVarint(int)
      */
     public static int sizeOfVarlong(long value) {
-        long v = (value << 1) ^ (value >> 63);
+        return sizeOfUnsignedVarlong((value << 1) ^ (value >> 63));
+    }
 
+    // visible for benchmarking
+    public static int sizeOfUnsignedVarlong(long v) {
         // For implementation notes @see #sizeOfUnsignedVarint(int)
         // Similar logic is applied to allow for 64bit input -> 1-9byte output.
         // return (70 - leadingZeros) / 7 + leadingZeros / 64;
