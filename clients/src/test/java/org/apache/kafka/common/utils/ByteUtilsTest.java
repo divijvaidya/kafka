@@ -33,6 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ByteUtilsTest {
+    private static final int MAX_LENGTH_VARINT = 5;
+    private static final int MAX_LENGTH_VARLONG = 10;
     private final byte x00 = 0x00;
     private final byte x01 = 0x01;
     private final byte x02 = 0x02;
@@ -246,7 +248,7 @@ public class ByteUtilsTest {
     public void testCorrectnessWriteUnsignedVarlong() {
         // The old well-known implementation for writeVarlong.
         LongFunction<ByteBuffer> simpleImplementation = (long value) -> {
-            ByteBuffer buffer = ByteBuffer.allocate(10);
+            ByteBuffer buffer = ByteBuffer.allocate(MAX_LENGTH_VARLONG);
             while ((value & 0xffffffffffffff80L) != 0L) {
                 byte b = (byte) ((value & 0x7f) | 0x80);
                 buffer.put(b);
@@ -258,8 +260,8 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer actual = ByteBuffer.allocate(10);
-        for (long i = 1; i <= Long.MAX_VALUE && i >= 0; i = i << 1) {
+        final ByteBuffer actual = ByteBuffer.allocate(MAX_LENGTH_VARLONG);
+        for (long i = 1; i < Long.MAX_VALUE && i >= 0; i = i << 1) {
             ByteUtils.writeUnsignedVarlong(i, actual);
             final ByteBuffer expected = simpleImplementation.apply(i);
             assertArrayEquals(expected.array(), actual.array(), "Implementations do not match for number=" + i);
@@ -271,7 +273,7 @@ public class ByteUtilsTest {
     public void testCorrectnessWriteUnsignedVarint() {
         // The old well-known implementation for writeUnsignedVarint.
         IntFunction<ByteBuffer> simpleImplementation = (int value) -> {
-            ByteBuffer buffer = ByteBuffer.allocate(10);
+            ByteBuffer buffer = ByteBuffer.allocate(MAX_LENGTH_VARINT);
             while (true) {
                 if ((value & ~0x7F) == 0) {
                     buffer.put((byte) value);
@@ -286,7 +288,7 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer actual = ByteBuffer.allocate(10);
+        final ByteBuffer actual = ByteBuffer.allocate(MAX_LENGTH_VARINT);
         for (int i = 0; i < Integer.MAX_VALUE && i >= 0; i += 13) {
             ByteUtils.writeUnsignedVarint(i, actual);
             final ByteBuffer expected = simpleImplementation.apply(i);
@@ -313,10 +315,12 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer testData = ByteBuffer.allocate(5);
-        for (int i = 0; i <= Integer.MAX_VALUE && i >= 0; i += 13) {
+        final ByteBuffer testData = ByteBuffer.allocate(MAX_LENGTH_VARINT);
+        for (int i = 0; i < Integer.MAX_VALUE && i >= 0; i += 13) {
             ByteUtils.writeUnsignedVarint(i, testData);
-            int actual = ByteUtils.readUnsignedVarint(testData);
+            // prepare buffer for reading
+            testData.flip();
+            final int actual = ByteUtils.readUnsignedVarint(testData.duplicate());
             final int expected = simpleImplementation.apply(testData);
             assertEquals(expected, actual);
             testData.clear();
@@ -341,10 +345,12 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer testData = ByteBuffer.allocate(10);
-        for (long i = 1; i <= Long.MAX_VALUE && i >= 0; i = i << 1) {
+        final ByteBuffer testData = ByteBuffer.allocate(MAX_LENGTH_VARLONG);
+        for (long i = 1; i < Long.MAX_VALUE && i >= 0; i = i << 1) {
             ByteUtils.writeUnsignedVarlong(i, testData);
-            long actual = ByteUtils.readUnsignedVarlong(testData);
+            // prepare buffer for reading
+            testData.flip();
+            final long actual = ByteUtils.readUnsignedVarlong(testData.duplicate());
             final long expected = simpleImplementation.apply(testData);
             assertEquals(expected, actual);
             testData.clear();
