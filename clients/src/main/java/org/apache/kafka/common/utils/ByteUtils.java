@@ -188,37 +188,34 @@ public final class ByteUtils {
      *
      * @throws IllegalArgumentException if variable-length value does not terminate after 5 bytes have been read
      * @throws IOException              if {@link DataInput} throws {@link IOException}
+     * @throws EOFException             if {@link DataInput} throws {@link EOFException}
      */
     static int readUnsignedVarint(DataInput in) throws IOException {
-        try {
-            byte tmp = in.readByte();
-            if (tmp >= 0) {
-                return tmp;
+        byte tmp = in.readByte();
+        if (tmp >= 0) {
+            return tmp;
+        } else {
+            int result = tmp & 127;
+            if ((tmp = in.readByte()) >= 0) {
+                result |= tmp << 7;
             } else {
-                int result = tmp & 127;
+                result |= (tmp & 127) << 7;
                 if ((tmp = in.readByte()) >= 0) {
-                    result |= tmp << 7;
+                    result |= tmp << 14;
                 } else {
-                    result |= (tmp & 127) << 7;
+                    result |= (tmp & 127) << 14;
                     if ((tmp = in.readByte()) >= 0) {
-                        result |= tmp << 14;
+                        result |= tmp << 21;
                     } else {
-                        result |= (tmp & 127) << 14;
-                        if ((tmp = in.readByte()) >= 0) {
-                            result |= tmp << 21;
-                        } else {
-                            result |= (tmp & 127) << 21;
-                            result |= (tmp = in.readByte()) << 28;
-                            if (tmp < 0) {
-                                throw illegalVarintException(result);
-                            }
+                        result |= (tmp & 127) << 21;
+                        result |= (tmp = in.readByte()) << 28;
+                        if (tmp < 0) {
+                            throw illegalVarintException(result);
                         }
                     }
                 }
-                return result;
             }
-        } catch (EOFException e) {
-            throw new IllegalArgumentException("Input stream does not contain enough bytes to read a varint.");
+            return result;
         }
     }
 
@@ -267,48 +264,46 @@ public final class ByteUtils {
     }
 
     private static long readUnsignedVarlong(DataInput in) throws IOException {
-        try {
-            byte tmp = in.readByte();
-            if (tmp >= 0) {
-                return tmp;
+        byte tmp = in.readByte();
+        if (tmp >= 0) {
+            return tmp;
+        } else {
+            long result = tmp & 0x7f;
+            if ((tmp = in.readByte()) >= 0) {
+                result |= tmp << 7;
             } else {
-                long result = tmp & 0x7f;
+                result |= (tmp & 0x7f) << 7;
                 if ((tmp = in.readByte()) >= 0) {
-                    result |= tmp << 7;
+                    result |= tmp << 14;
                 } else {
-                    result |= (tmp & 0x7f) << 7;
+                    result |= (tmp & 0x7f) << 14;
                     if ((tmp = in.readByte()) >= 0) {
-                        result |= tmp << 14;
+                        result |= tmp << 21;
                     } else {
-                        result |= (tmp & 0x7f) << 14;
+                        result |= (tmp & 0x7f) << 21;
                         if ((tmp = in.readByte()) >= 0) {
-                            result |= tmp << 21;
+                            result |= (long) tmp << 28;
                         } else {
-                            result |= (tmp & 0x7f) << 21;
+                            result |= (long) (tmp & 0x7f) << 28;
                             if ((tmp = in.readByte()) >= 0) {
-                                result |= (long) tmp << 28;
+                                result |= (long) tmp << 35;
                             } else {
-                                result |= (long) (tmp & 0x7f) << 28;
+                                result |= (long) (tmp & 0x7f) << 35;
                                 if ((tmp = in.readByte()) >= 0) {
-                                    result |= (long) tmp << 35;
+                                    result |= (long) tmp << 42;
                                 } else {
-                                    result |= (long) (tmp & 0x7f) << 35;
+                                    result |= (long) (tmp & 0x7f) << 42;
                                     if ((tmp = in.readByte()) >= 0) {
-                                        result |= (long) tmp << 42;
+                                        result |= (long) tmp << 49;
                                     } else {
-                                        result |= (long) (tmp & 0x7f) << 42;
+                                        result |= (long) (tmp & 0x7f) << 49;
                                         if ((tmp = in.readByte()) >= 0) {
-                                            result |= (long) tmp << 49;
+                                            result |= (long) tmp << 56;
                                         } else {
-                                            result |= (long) (tmp & 0x7f) << 49;
-                                            if ((tmp = in.readByte()) >= 0) {
-                                                result |= (long) tmp << 56;
-                                            } else {
-                                                result |= (long) (tmp & 0x7f) << 56;
-                                                result |= (long) (tmp = in.readByte()) << 63;
-                                                if (tmp < 0) {
-                                                    throw illegalVarlongException(result);
-                                                }
+                                            result |= (long) (tmp & 0x7f) << 56;
+                                            result |= (long) (tmp = in.readByte()) << 63;
+                                            if (tmp < 0) {
+                                                throw illegalVarlongException(result);
                                             }
                                         }
                                     }
@@ -317,11 +312,9 @@ public final class ByteUtils {
                         }
                     }
                 }
-                return result;
             }
-        } catch (EOFException ex) {
-            throw new IllegalArgumentException("Input stream does not contain enough bytes to read a varlong.");
-        }    
+            return result;
+        }
     }
 
     /**
