@@ -74,9 +74,18 @@ public class ByteUtilsBenchmark {
     }
 
     @Benchmark
-    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarintOld() {
+        ByteBuffer buffer = ByteBuffer.allocate(5);
+        for (int random_value : this.random_ints) {
+            ByteUtils.writeUnsignedVarint(random_value, buffer);
+            ByteUtils.readUnsignedVarintOld(buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
     public void testUnsignedReadVarint() {
-        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
+        ByteBuffer buffer = ByteBuffer.allocate(5);
         for (int random_value : this.random_ints) {
             ByteUtils.writeUnsignedVarint(random_value, buffer);
             ByteUtils.readUnsignedVarint(buffer);
@@ -85,18 +94,63 @@ public class ByteUtilsBenchmark {
     }
 
     @Benchmark
-    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarintNew() {
-        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
+    public void testUnsignedReadVarlongOld() {
+        ByteBuffer buffer = ByteBuffer.allocate(10);
+        for (long random_value : this.random_longs) {
+            ByteUtils.writeUnsignedVarlong(random_value, buffer);
+            ByteUtils.readUnsignedVarlongOld(buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
+    public void testUnsignedReadVarlong() {
+        ByteBuffer buffer = ByteBuffer.allocate(10);
+        for (long random_value : this.random_longs) {
+            ByteUtils.writeUnsignedVarlong(random_value, buffer);
+            ByteUtils.readUnsignedVarlong(buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
+    public void testUnsignedWriteVarintOld() {
+        ByteBuffer buffer = ByteBuffer.allocate(5);
+        for (int random_value : this.random_ints) {
+            ByteUtils.writeUnsignedVarintOld(random_value, buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
+    public void testUnsignedWriteVarint() {
+        ByteBuffer buffer = ByteBuffer.allocate(5);
         for (int random_value : this.random_ints) {
             ByteUtils.writeUnsignedVarint(random_value, buffer);
-            ByteUtils.readUnsignedVarintNew(buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
+    public void testUnsignedWriteVarlongOld() {
+        ByteBuffer buffer = ByteBuffer.allocate(10);
+        for (long random_value : this.random_longs) {
+            ByteUtils.writeUnsignedVarlongOld(random_value, buffer);
+            buffer.clear();
+        }
+    }
+
+    @Benchmark
+    public void testUnsignedWriteVarlong() {
+        ByteBuffer buffer = ByteBuffer.allocate(10);
+        for (long random_value : this.random_longs) {
+            ByteUtils.writeUnsignedVarlong(random_value, buffer);
             buffer.clear();
         }
     }
 
     public void testSizeOfUnsignedVarint() {
-        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
+        ByteBuffer buffer = ByteBuffer.allocate(5);
         for (int random_value : this.random_ints) {
             ByteUtils.writeUnsignedVarint(random_value, buffer);
             buffer.clear();

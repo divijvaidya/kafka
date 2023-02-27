@@ -421,7 +421,7 @@ public final class ByteUtils {
             throw new IllegalArgumentException("Input buffer does not contain enough bytes to read a varint.");
         }
     }
-    public static long readVarlongOld(ByteBuffer buffer)  {
+    public static long readUnsignedVarlongOld(ByteBuffer buffer)  {
         long value = 0L;
         int i = 0;
         long b;
@@ -432,7 +432,7 @@ public final class ByteUtils {
                 throw illegalVarlongException(value);
         }
         value |= b << i;
-        return (value >>> 1) ^ -(value & 1);
+        return value;
     }
 
     /**
@@ -488,6 +488,15 @@ public final class ByteUtils {
             buffer.putInt(w);
             buffer.put((byte) (value >>> 28));
         }
+    }
+
+    public static void writeUnsignedVarintOld(int value, ByteBuffer buffer) {
+        while ((value & 0xffffff80) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
+            buffer.put(b);
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
     }
 
     /**
@@ -620,7 +629,9 @@ public final class ByteUtils {
         long v = (value << 1) ^ (value >> 63);
         writeUnsignedVarlong(v, buffer);
     }
-    static void writeUnsignedVarlong(long v, ByteBuffer buffer) {
+
+    // visible for benchmarking
+    public static void writeUnsignedVarlong(long v, ByteBuffer buffer) {
         if ((v & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
             buffer.put((byte) v);
         } else if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
@@ -673,14 +684,13 @@ public final class ByteUtils {
         }
     }
 
-    public static void writeVarlongOld(long value, ByteBuffer buffer) {
-        long v = (value << 1) ^ (value >> 63);
-        while ((v & 0xffffffffffffff80L) != 0L) {
-            byte b = (byte) ((v & 0x7f) | 0x80);
+    public static void writeUnsignedVarlongOld(long value, ByteBuffer buffer) {
+        while ((value & 0xffffffffffffff80L) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
             buffer.put(b);
-            v >>>= 7;
+            value >>>= 7;
         }
-        buffer.put((byte) v);
+        buffer.put((byte) value);
     }
 
     /**

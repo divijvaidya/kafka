@@ -313,7 +313,7 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer testData = ByteBuffer.allocate(Integer.SIZE);
+        final ByteBuffer testData = ByteBuffer.allocate(5);
         for (int i = 0; i <= Integer.MAX_VALUE && i >= 0; i += 13) {
             ByteUtils.writeUnsignedVarint(i, testData);
             int actual = ByteUtils.readUnsignedVarint(testData);
@@ -341,7 +341,7 @@ public class ByteUtilsTest {
         };
 
         // compare the full range of values
-        final ByteBuffer testData = ByteBuffer.allocate(Integer.SIZE);
+        final ByteBuffer testData = ByteBuffer.allocate(10);
         for (long i = 1; i <= Long.MAX_VALUE && i >= 0; i = i << 1) {
             ByteUtils.writeUnsignedVarlong(i, testData);
             long actual = ByteUtils.readUnsignedVarlong(testData);
