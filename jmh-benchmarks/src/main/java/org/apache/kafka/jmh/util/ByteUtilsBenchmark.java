@@ -32,6 +32,7 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
@@ -39,14 +40,15 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 @State(Scope.Benchmark)
 @OutputTimeUnit(TimeUnit.SECONDS)
-@Fork(3)
+@Fork(1)
 @Warmup(iterations = 5, time = 1)
-@Measurement(iterations = 10, time = 1)
+@Measurement(iterations = 5, time = 1)
 public class ByteUtilsBenchmark {
-    static final int DATA_SET_SAMPLE_SIZE = 20480;
-    int[] random_ints;
-    long[] random_longs;
-    Random random;
+    private static final int DATA_SET_SAMPLE_SIZE = 2048;
+    private int[] random_ints;
+    private long[] random_longs;
+    private Random random;
+    private ByteBuffer testBuffer;
 
     @Setup(Level.Trial)
     public void setUpBenchmarkLevel() {
@@ -55,13 +57,29 @@ public class ByteUtilsBenchmark {
         random = new Random(1337);
     }
 
-    private static int generateRandomBitNumber(Random random, int i) {
+    @Setup(Level.Invocation)
+    public void setUpInvocationBuffer() {
+        testBuffer = ByteBuffer.allocate(10);
+    }
+
+    private static int generateRandomBitNumber(Random rng, int i) {
         int lowerBound = (1 << (i - 1));
         int upperBound = (1 << i) - 1;
         if (lowerBound == upperBound) {
             return lowerBound;
         }
-        return lowerBound + random.nextInt(upperBound - lowerBound);
+        return lowerBound + rng.nextInt(upperBound - lowerBound);
+    }
+
+    private static long generateRandomBitNumberLong(Random rng, int i) {
+        long lowerBound = (1L << (i - 1));
+        long upperBound = (1L << i) - 1;
+        if (lowerBound == upperBound) {
+            return lowerBound;
+        }
+        return lowerBound +
+            rng.longs(lowerBound, upperBound).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Unable to create a random long in the range=[" + lowerBound + ", " + upperBound + "]"));
     }
 
     @Setup(Level.Iteration)
@@ -70,90 +88,106 @@ public class ByteUtilsBenchmark {
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
             this.random_ints[i] = generateRandomBitNumber(random, random.nextInt(30) + 1);
         }
-        random_longs = random.longs(DATA_SET_SAMPLE_SIZE).toArray();
-    }
 
-    @Benchmark
-    public void testUnsignedReadVarintOld() {
-        ByteBuffer buffer = ByteBuffer.allocate(5);
-        for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, buffer);
-            ByteUtils.readUnsignedVarintOld(buffer);
-            buffer.clear();
+        random_longs = new long[DATA_SET_SAMPLE_SIZE];
+        for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
+            this.random_longs[i] = generateRandomBitNumberLong(random, random.nextInt(60) + 1);
         }
     }
 
     @Benchmark
-    public void testUnsignedReadVarint() {
-        ByteBuffer buffer = ByteBuffer.allocate(5);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarintOld(Blackhole bk) {
         for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, buffer);
-            ByteUtils.readUnsignedVarint(buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarint(random_value, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarintOld(testBuffer));
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedReadVarlongOld() {
-        ByteBuffer buffer = ByteBuffer.allocate(10);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarint(Blackhole bk) {
+        for (int random_value : this.random_ints) {
+            ByteUtils.writeUnsignedVarint(random_value, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarint(testBuffer));
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarlongOld(Blackhole bk) {
         for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlong(random_value, buffer);
-            ByteUtils.readUnsignedVarlongOld(buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarlongOld(testBuffer));
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedReadVarlong() {
-        ByteBuffer buffer = ByteBuffer.allocate(10);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarlong(Blackhole bk) {
         for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlong(random_value, buffer);
-            ByteUtils.readUnsignedVarlong(buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarlong(testBuffer));
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedWriteVarintOld() {
-        ByteBuffer buffer = ByteBuffer.allocate(5);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarintOld(Blackhole bk) {
         for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarintOld(random_value, buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarintOld(random_value, testBuffer);
+            bk.consume(testBuffer);
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedWriteVarint() {
-        ByteBuffer buffer = ByteBuffer.allocate(5);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarint(Blackhole bk) {
         for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarint(random_value, testBuffer);
+            bk.consume(testBuffer);
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedWriteVarlongOld() {
-        ByteBuffer buffer = ByteBuffer.allocate(10);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarlongOld(Blackhole bk) {
         for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlongOld(random_value, buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarlongOld(random_value, testBuffer);
+            bk.consume(testBuffer);
+            testBuffer.clear();
         }
     }
 
     @Benchmark
-    public void testUnsignedWriteVarlong() {
-        ByteBuffer buffer = ByteBuffer.allocate(10);
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarlong(Blackhole bk) {
         for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlong(random_value, buffer);
-            buffer.clear();
+            ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
+            bk.consume(testBuffer);
+            testBuffer.clear();
         }
     }
 
-    public void testSizeOfUnsignedVarint() {
-        ByteBuffer buffer = ByteBuffer.allocate(5);
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testSizeOfUnsignedVarint(Blackhole bk) {
         for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, buffer);
-            buffer.clear();
+            bk.consume(ByteUtils.sizeOfUnsignedVarint(random_value));
         }
     }
 

@@ -469,24 +469,45 @@ public final class ByteUtils {
          * This implementation performs two optimizations over traditional loop implementation. One with unrolling
          * the loop and another is to bulk the writing of bytes to the buffer.
          */
+//        if ((value & (0xFFFFFFFF << 7)) == 0) {
+//            buffer.put((byte) value);
+//        } else if ((value & (0xFFFFFFFF << 14)) == 0) {
+//            int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
+//            buffer.putShort((short) w);
+//        } else if ((value & (0xFFFFFFFF << 21)) == 0) {
+//            int w = (value & 0x7F | 0x80) << 8 | ((value >>> 7) & 0x7F | 0x80);
+//            buffer.putShort((short) w);
+//            buffer.put((byte) (value >>> 14));
+//        } else if ((value & (0xFFFFFFFF << 28)) == 0) {
+//            int w = (value & 0x7F | 0x80) << 24 | (((value >>> 7) & 0x7F | 0x80) << 16)
+//                | ((value >>> 14) & 0x7F | 0x80) << 8 | (value >>> 21);
+//            buffer.putInt(w);
+//        } else {
+//            int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
+//                | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
+//            buffer.putInt(w);
+//            buffer.put((byte) (value >>> 28));
+//        }
         if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
-        } else if ((value & (0xFFFFFFFF << 14)) == 0) {
-            int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
-            buffer.putShort((short) w);
-        } else if ((value & (0xFFFFFFFF << 21)) == 0) {
-            int w = (value & 0x7F | 0x80) << 8 | ((value >>> 7) & 0x7F | 0x80);
-            buffer.putShort((short) w);
-            buffer.put((byte) (value >>> 14));
-        } else if ((value & (0xFFFFFFFF << 28)) == 0) {
-            int w = (value & 0x7F | 0x80) << 24 | (((value >>> 7) & 0x7F | 0x80) << 16)
-                | ((value >>> 14) & 0x7F | 0x80) << 8 | (value >>> 21);
-            buffer.putInt(w);
         } else {
-            int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
-                | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
-            buffer.putInt(w);
-            buffer.put((byte) (value >>> 28));
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        buffer.put((byte) (value >>> 28));
+                    }
+                }
+            }
         }
     }
 
