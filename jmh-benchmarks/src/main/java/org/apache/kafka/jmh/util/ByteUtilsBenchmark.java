@@ -45,8 +45,8 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @Measurement(iterations = 10, time = 1)
 public class ByteUtilsBenchmark {
     private static final int DATA_SET_SAMPLE_SIZE = 2048;
-    private int[] random_ints;
-    private long[] random_longs;
+    private int[] randomInts;
+    private long[] randomLongs;
     private Random random;
     private ByteBuffer testBuffer;
 
@@ -63,7 +63,7 @@ public class ByteUtilsBenchmark {
     }
 
     private static int generateRandomBitNumber(Random rng, int i) {
-        int lowerBound = (1 << (i - 1));
+        int lowerBound = 1 << (i - 1);
         int upperBound = (1 << i) - 1;
         if (lowerBound == upperBound) {
             return lowerBound;
@@ -72,7 +72,7 @@ public class ByteUtilsBenchmark {
     }
 
     private static long generateRandomBitNumberLong(Random rng, int i) {
-        long lowerBound = (1L << (i - 1));
+        long lowerBound = 1L << (i - 1);
         long upperBound = (1L << i) - 1;
         if (lowerBound == upperBound) {
             return lowerBound;
@@ -84,22 +84,22 @@ public class ByteUtilsBenchmark {
 
     @Setup(Level.Iteration)
     public void setUp() {
-        random_ints = new int[DATA_SET_SAMPLE_SIZE];
+        randomInts = new int[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.random_ints[i] = generateRandomBitNumber(random, random.nextInt(30) + 1);
+            this.randomInts[i] = generateRandomBitNumber(random, random.nextInt(30) + 1);
         }
 
-        random_longs = new long[DATA_SET_SAMPLE_SIZE];
+        randomLongs = new long[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.random_longs[i] = generateRandomBitNumberLong(random, random.nextInt(60) + 1);
+            this.randomLongs[i] = generateRandomBitNumberLong(random, random.nextInt(60) + 1);
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedReadVarint(Blackhole bk) {
-        for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, testBuffer);
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
             // prepare for reading
             testBuffer.flip();
             bk.consume(ByteUtils.readUnsignedVarint(testBuffer));
@@ -110,8 +110,8 @@ public class ByteUtilsBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedReadVarlong(Blackhole bk) {
-        for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
+        for (long randomValue : this.randomLongs) {
+            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
             // prepare for reading
             testBuffer.flip();
             bk.consume(ByteUtils.readUnsignedVarlong(testBuffer));
@@ -122,8 +122,8 @@ public class ByteUtilsBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedWriteVarint() {
-        for (int random_value : this.random_ints) {
-            ByteUtils.writeUnsignedVarint(random_value, testBuffer);
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
@@ -131,8 +131,8 @@ public class ByteUtilsBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedWriteVarlong() {
-        for (long random_value : this.random_longs) {
-            ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
+        for (long randomValue : this.randomLongs) {
+            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
@@ -140,16 +140,16 @@ public class ByteUtilsBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarint(Blackhole bk) {
-        for (int random_value : this.random_ints) {
-            bk.consume(ByteUtils.sizeOfUnsignedVarint(random_value));
+        for (int randomValue : this.randomInts) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarint(randomValue));
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarintSimple(Blackhole bk) {
-        for (int random_value : this.random_ints) {
-            int value = random_value;
+        for (int randomValue : this.randomInts) {
+            int value = randomValue;
             int bytes = 1;
             while ((value & 0xffffff80) != 0L) {
                 bytes += 1;
@@ -162,8 +162,8 @@ public class ByteUtilsBenchmark {
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarlong(Blackhole bk) {
-        for (long random_value : this.random_longs) {
-            bk.consume(ByteUtils.sizeOfUnsignedVarlong(random_value));
+        for (long randomValue : this.randomLongs) {
+            bk.consume(ByteUtils.sizeOfUnsignedVarlong(randomValue));
         }
     }
 
