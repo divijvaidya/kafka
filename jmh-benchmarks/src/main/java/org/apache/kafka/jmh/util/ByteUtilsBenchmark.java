@@ -17,11 +17,13 @@
 
 package org.apache.kafka.jmh.util;
 
+import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.common.utils.ByteUtils;
 import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
@@ -30,7 +32,6 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
-import org.openjdk.jmh.infra.Blackhole;
 import org.openjdk.jmh.runner.Runner;
 import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
@@ -42,7 +43,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 10, time = 1)
 public class ByteUtilsBenchmark {
-    static final int DATA_SET_SAMPLE_SIZE = 1024 * 1024;
+    static final int DATA_SET_SAMPLE_SIZE = 20480;
     int[] random_ints;
     long[] random_longs;
     Random random;
@@ -54,49 +55,51 @@ public class ByteUtilsBenchmark {
         random = new Random(1337);
     }
 
+    private static int generateRandomBitNumber(Random random, int i) {
+        int lowerBound = (1 << (i - 1));
+        int upperBound = (1 << i) - 1;
+        if (lowerBound == upperBound) {
+            return lowerBound;
+        }
+        return lowerBound + random.nextInt(upperBound - lowerBound);
+    }
+
     @Setup(Level.Iteration)
     public void setUp() {
-        random_ints = random.ints(DATA_SET_SAMPLE_SIZE).toArray();
+        random_ints = new int[DATA_SET_SAMPLE_SIZE];
+        for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
+            this.random_ints[i] = generateRandomBitNumber(random, random.nextInt(30) + 1);
+        }
         random_longs = random.longs(DATA_SET_SAMPLE_SIZE).toArray();
     }
 
     @Benchmark
-    public void testSizeOfUnsignedVarint(Blackhole bk) {
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarint() {
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
         for (int random_value : this.random_ints) {
-            bk.consume(ByteUtils.sizeOfUnsignedVarint(random_value));
+            ByteUtils.writeUnsignedVarint(random_value, buffer);
+            ByteUtils.readUnsignedVarint(buffer);
+            buffer.clear();
         }
     }
 
     @Benchmark
-    public void testSizeOfUnsignedVarintSimple(Blackhole bk) {
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarintNew() {
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
         for (int random_value : this.random_ints) {
-            int value = random_value;
-            int bytes = 1;
-            while ((value & 0xffffff80) != 0L) {
-                bytes += 1;
-                value >>>= 7;
-            }
-            bk.consume(bytes);
+            ByteUtils.writeUnsignedVarint(random_value, buffer);
+            ByteUtils.readUnsignedVarintNew(buffer);
+            buffer.clear();
         }
     }
 
-    @Benchmark
-    public void testSizeOfVarlong(Blackhole bk) {
-        for (long random_value : this.random_longs) {
-            bk.consume(ByteUtils.sizeOfVarlong(random_value));
-        }
-    }
-
-    @Benchmark
-    public void testSizeOfVarlongSimple(Blackhole bk) {
-        for (long random_value : this.random_longs) {
-            long v = (random_value << 1) ^ (random_value >> 63);
-            int bytes = 1;
-            while ((v & 0xffffffffffffff80L) != 0L) {
-                bytes += 1;
-                v >>>= 7;
-            }
-            bk.consume(bytes);
+    public void testSizeOfUnsignedVarint() {
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE);
+        for (int random_value : this.random_ints) {
+            ByteUtils.writeUnsignedVarint(random_value, buffer);
+            buffer.clear();
         }
     }
 

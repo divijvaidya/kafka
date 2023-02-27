@@ -524,4 +524,10 @@ For a detailed description of spotbugs bug categories, see https://spotbugs.read
         <Bug pattern="NM_SAME_SIMPLE_NAME_AS_SUPERCLASS"/>
     </Match>
 
+    <Match>
+        <Package name="org.apache.kafka.common.utils" />
+        <Source name="ByteUtils.java"/>
+        <Bug pattern="ICAST_QUESTIONABLE_UNSIGNED_RIGHT_SHIFT"/>
+    </Match>
+
 </FindBugsFilter>
