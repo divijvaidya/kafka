@@ -311,65 +311,6 @@ public final class ByteUtils {
 
     @SuppressWarnings("checkstyle:cyclomaticcomplexity")
     public static long readUnsignedVarlong(ByteBuffer buffer)  {
-        fastpath:
-        {
-            int tempPos = buffer.position();
-
-            if (!buffer.hasRemaining() || !buffer.hasArray()) {
-                break fastpath;
-            }
-
-            final byte[] tempBuf = buffer.array();
-            long x;
-            int y;
-            if ((y = tempBuf[tempPos++]) >= 0) {
-                buffer.position(tempPos);
-                return y;
-            } else if (buffer.remaining() < 9) {
-                break fastpath;
-            } else if ((y ^= tempBuf[tempPos++] << 7) < 0) {
-                x = y ^ (~0 << 7);
-            } else if ((y ^= tempBuf[tempPos++] << 14) >= 0) {
-                x = y ^ ((~0 << 7) ^ (~0 << 14));
-            } else if ((y ^= tempBuf[tempPos++] << 21) < 0) {
-                x = y ^ ((~0 << 7) ^ (~0 << 14) ^ (~0 << 21));
-            } else if ((x = y ^ ((long) tempBuf[tempPos++] << 28)) >= 0L) {
-                x ^= (~0L << 7) ^ (~0L << 14) ^ (~0L << 21) ^ (~0L << 28);
-            } else if ((x ^= (long) tempBuf[tempPos++] << 35) < 0L) {
-                x ^= (~0L << 7) ^ (~0L << 14) ^ (~0L << 21) ^ (~0L << 28) ^ (~0L << 35);
-            } else if ((x ^= (long) tempBuf[tempPos++] << 42) >= 0L) {
-                x ^= (~0L << 7) ^ (~0L << 14) ^ (~0L << 21) ^ (~0L << 28) ^ (~0L << 35) ^ (~0L << 42);
-            } else if ((x ^= (long) tempBuf[tempPos++] << 49) < 0L) {
-                x ^=
-                    (~0L << 7)
-                        ^ (~0L << 14)
-                        ^ (~0L << 21)
-                        ^ (~0L << 28)
-                        ^ (~0L << 35)
-                        ^ (~0L << 42)
-                        ^ (~0L << 49);
-            } else {
-                x ^= (long) tempBuf[tempPos++] << 56;
-                x ^=
-                    (~0L << 7)
-                        ^ (~0L << 14)
-                        ^ (~0L << 21)
-                        ^ (~0L << 28)
-                        ^ (~0L << 35)
-                        ^ (~0L << 42)
-                        ^ (~0L << 49)
-                        ^ (~0L << 56);
-                if (x < 0L) {
-                    if (tempBuf[tempPos++] < 0L) {
-                        break fastpath;
-                    }
-                }
-            }
-            buffer.position(tempPos);
-            return x;
-        }
-
-        // slow implementation
         try {
             byte tmp = buffer.get();
             if (tmp >= 0) {
@@ -404,9 +345,14 @@ public final class ByteUtils {
                                             result |= (long) tmp << 49;
                                         } else {
                                             result |= (long) (tmp & 127) << 49;
-                                            result |= (long) (tmp = buffer.get()) << 56;
-                                            if (tmp < 0) {
-                                                throw new IllegalArgumentException("Malformed varint.");
+                                            if ((tmp = buffer.get()) >= 0) {
+                                                result |= (long) tmp << 56;
+                                            } else {
+                                                result |= (long) (tmp & 127) << 56;
+                                                result |= (long) (tmp = buffer.get()) << 63;
+                                                if (tmp < 0) {
+                                                    throw new IllegalArgumentException("Malformed varint.");
+                                                }
                                             }
                                         }
                                     }
@@ -466,28 +412,9 @@ public final class ByteUtils {
     public static void writeUnsignedVarint(int value, ByteBuffer buffer) {
         /*
          * Implementation notes:
-         * This implementation performs two optimizations over traditional loop implementation. One with unrolling
-         * the loop and another is to bulk the writing of bytes to the buffer.
+         * This implementation performs optimizations over traditional loop implementation by unrolling
+         * the loop.
          */
-//        if ((value & (0xFFFFFFFF << 7)) == 0) {
-//            buffer.put((byte) value);
-//        } else if ((value & (0xFFFFFFFF << 14)) == 0) {
-//            int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
-//            buffer.putShort((short) w);
-//        } else if ((value & (0xFFFFFFFF << 21)) == 0) {
-//            int w = (value & 0x7F | 0x80) << 8 | ((value >>> 7) & 0x7F | 0x80);
-//            buffer.putShort((short) w);
-//            buffer.put((byte) (value >>> 14));
-//        } else if ((value & (0xFFFFFFFF << 28)) == 0) {
-//            int w = (value & 0x7F | 0x80) << 24 | (((value >>> 7) & 0x7F | 0x80) << 16)
-//                | ((value >>> 14) & 0x7F | 0x80) << 8 | (value >>> 21);
-//            buffer.putInt(w);
-//        } else {
-//            int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
-//                | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
-//            buffer.putInt(w);
-//            buffer.put((byte) (value >>> 28));
-//        }
         if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
         } else {
@@ -532,23 +459,25 @@ public final class ByteUtils {
      */
     public static void writeUnsignedVarint(int value, DataOutput out) throws IOException {
         if ((value & (0xFFFFFFFF << 7)) == 0) {
-            out.writeByte((byte) value);
-        } else if ((value & (0xFFFFFFFF << 14)) == 0) {
-            int w = (value & 0x7F | 0x80) << 8 | (value >>> 7);
-            out.writeShort((short) w);
-        } else if ((value & (0xFFFFFFFF << 21)) == 0) {
-            int w = (value & 0x7F | 0x80) << 8 | ((value >>> 7) & 0x7F | 0x80);
-            out.writeShort((short) w);
-            out.writeByte((byte) (value >>> 14));
-        } else if ((value & (0xFFFFFFFF << 28)) == 0) {
-            int w = (value & 0x7F | 0x80) << 24 | (((value >>> 7) & 0x7F | 0x80) << 16)
-                | ((value >>> 14) & 0x7F | 0x80) << 8 | (value >>> 21);
-            out.writeInt(w);
+            out.writeByte(value);
         } else {
-            int w = (value & 0x7F | 0x80) << 24 | ((value >>> 7) & 0x7F | 0x80) << 16
-                | ((value >>> 14) & 0x7F | 0x80) << 8 | ((value >>> 21) & 0x7F | 0x80);
-            out.writeInt(w);
-            out.writeByte((byte) (value >>> 28));
+            out.writeByte(value & 0x7F | 0x80);
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                out.writeByte(value >>> 7);
+            } else {
+                out.writeByte((value >>> 7) & 0x7F | 0x80);
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    out.writeByte(value >>> 14);
+                } else {
+                    out.writeByte((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        out.writeByte(value >>> 21);
+                    } else {
+                        out.writeByte((value >>> 21) & 0x7F | 0x80);
+                        out.writeByte(value >>> 28);
+                    }
+                }
+            }
         }
     }
 
@@ -588,53 +517,49 @@ public final class ByteUtils {
         long v = (value << 1) ^ (value >> 63);
         if ((v & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
             out.writeByte((byte) v);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
-            long w = (v & 0x7F | 0x80) << 8 | (v >>> 7);
-            out.writeShort((short) w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
-            long w = (v & 0x7F | 0x80) << 8 | ((v >>> 7) & 0x7F | 0x80);
-            out.writeShort((short) w);
-            out.writeByte((byte) (v >>> 14));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | (((v >>> 7) & 0x7F | 0x80) << 16)
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | (v >>> 21);
-            out.writeInt((int) w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            out.writeInt((int) w);
-            out.writeByte((byte) (v >>> 28));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            out.writeInt((int) w);
-            out.writeShort((short) (((v >>> 28) & 0x7F | 0x80) << 8 | (v >>> 35)));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            out.writeInt((int) w);
-            out.writeShort((short) (((v >>> 28) & 0x7F | 0x80) << 8 | (v >>> 35) & 0x7F | 0x80));
-            out.writeByte((byte) (v >>> 42));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | (v >>> 49);
-            out.writeLong(w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | ((v >>> 49) & 0x7F | 0x80);
-            out.writeLong(w);
-            out.writeByte((byte) (v >>> 56));
         } else {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | ((v >>> 49) & 0x7F | 0x80);
-            out.writeLong(w);
-            out.writeShort((short) (((v >>> 56) & 0x7F | 0x80) << 8 | (v >>> 63)));
+            out.writeByte((byte) (v & 0x7F | 0x80));
+            if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+                out.writeByte((byte) (v >>> 7));
+            } else {
+                out.writeByte((byte) ((v >>> 7) & 0x7F | 0x80));
+                if ((v & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                    out.writeByte((byte) (v >>> 14));
+                } else {
+                    out.writeByte((byte) ((v >>> 14) & 0x7F | 0x80));
+                    if ((v & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                        out.writeByte((byte) (v >>> 21));
+                    } else {
+                        out.writeByte((byte) ((v >>> 21) & 0x7F | 0x80));
+                        if ((v & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            out.writeByte((byte) (v >>> 28));
+                        } else {
+                            out.writeByte((byte) ((v >>> 28) & 0x7F | 0x80));
+                            if ((v & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                out.writeByte((byte) (v >>> 35));
+                            } else {
+                                out.writeByte((byte) ((v >>> 35) & 0x7F | 0x80));
+                                if ((v & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    out.writeByte((byte) (v >>> 42));
+                                } else {
+                                    out.writeByte((byte) ((v >>> 42) & 0x7F | 0x80));
+                                    if ((v & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        out.writeByte((byte) (v >>> 49));
+                                    } else {
+                                        out.writeByte((byte) ((v >>> 49) & 0x7F | 0x80));
+                                        if ((v & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            out.writeByte((byte) (v >>> 56));
+                                        } else {
+                                            out.writeByte((byte) ((v >>> 56) & 0x7F | 0x80));
+                                            out.writeByte((byte) (v >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -652,56 +577,52 @@ public final class ByteUtils {
     }
 
     // visible for benchmarking
-    public static void writeUnsignedVarlong(long v, ByteBuffer buffer) {
-        if ((v & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
-            buffer.put((byte) v);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
-            long w = (v & 0x7F | 0x80) << 8 | (v >>> 7);
-            buffer.putShort((short) w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
-            long w = (v & 0x7F | 0x80) << 8 | ((v >>> 7) & 0x7F | 0x80);
-            buffer.putShort((short) w);
-            buffer.put((byte) (v >>> 14));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | (((v >>> 7) & 0x7F | 0x80) << 16)
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | (v >>> 21);
-            buffer.putInt((int) w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            buffer.putInt((int) w);
-            buffer.put((byte) (v >>> 28));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            buffer.putInt((int) w);
-            buffer.putShort((short) (((v >>> 28) & 0x7F | 0x80) << 8 | (v >>> 35)));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
-            long w = (v & 0x7F | 0x80) << 24 | ((v >>> 7) & 0x7F | 0x80) << 16
-                | ((v >>> 14) & 0x7F | 0x80) << 8 | ((v >>> 21) & 0x7F | 0x80);
-            buffer.putInt((int) w);
-            buffer.putShort((short) (((v >>> 28) & 0x7F | 0x80) << 8 | (v >>> 35) & 0x7F | 0x80));
-            buffer.put((byte) (v >>> 42));
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | (v >>> 49);
-            buffer.putLong(w);
-        } else if ((v & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | ((v >>> 49) & 0x7F | 0x80);
-            buffer.putLong(w);
-            buffer.put((byte) (v >>> 56));
+    public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
+            buffer.put((byte) value);
         } else {
-            long w = (v & 0x7F | 0x80) << 56 | ((v >>> 7) & 0x7F | 0x80) << 48
-                | ((v >>> 14) & 0x7F | 0x80) << 40 | ((v >>> 21) & 0x7F | 0x80) << 32
-                | ((v >>> 28) & 0x7F | 0x80) << 24 | ((v >>> 35) & 0x7F | 0x80) << 16
-                | ((v >>> 42) & 0x7F | 0x80) << 8 | ((v >>> 49) & 0x7F | 0x80);
-            buffer.putLong(w);
-            buffer.putShort((short) (((v >>> 56) & 0x7F | 0x80) << 8 | (v >>> 63)));
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            buffer.put((byte) (value >>> 28));
+                        } else {
+                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
+                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                buffer.put((byte) (value >>> 35));
+                            } else {
+                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
+                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    buffer.put((byte) (value >>> 42));
+                                } else {
+                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
+                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        buffer.put((byte) (value >>> 49));
+                                    } else {
+                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
+                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            buffer.put((byte) (value >>> 56));
+                                        } else {
+                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
+                                            buffer.put((byte) (value >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

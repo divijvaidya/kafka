@@ -145,40 +145,36 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintOld(Blackhole bk) {
+    public void testUnsignedWriteVarintOld() {
         for (int random_value : this.random_ints) {
             ByteUtils.writeUnsignedVarintOld(random_value, testBuffer);
-            bk.consume(testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarint(Blackhole bk) {
+    public void testUnsignedWriteVarint() {
         for (int random_value : this.random_ints) {
             ByteUtils.writeUnsignedVarint(random_value, testBuffer);
-            bk.consume(testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongOld(Blackhole bk) {
+    public void testUnsignedWriteVarlongOld() {
         for (long random_value : this.random_longs) {
             ByteUtils.writeUnsignedVarlongOld(random_value, testBuffer);
-            bk.consume(testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlong(Blackhole bk) {
+    public void testUnsignedWriteVarlong() {
         for (long random_value : this.random_longs) {
             ByteUtils.writeUnsignedVarlong(random_value, testBuffer);
-            bk.consume(testBuffer);
             testBuffer.clear();
         }
     }

@@ -414,7 +414,7 @@ public class ByteUtilsTest {
     }
 
     private void assertUnsignedVarintSerde(int value, byte[] expectedEncoding) throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate(32);
+        ByteBuffer buf = ByteBuffer.allocate(MAX_LENGTH_VARINT);
         ByteUtils.writeUnsignedVarint(value, buf);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
@@ -430,7 +430,7 @@ public class ByteUtilsTest {
     }
 
     private void assertVarintSerde(int value, byte[] expectedEncoding) throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate(32);
+        ByteBuffer buf = ByteBuffer.allocate(MAX_LENGTH_VARINT);
         ByteUtils.writeVarint(value, buf);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
@@ -446,7 +446,7 @@ public class ByteUtilsTest {
     }
 
     private void assertVarlongSerde(long value, byte[] expectedEncoding) throws IOException {
-        ByteBuffer buf = ByteBuffer.allocate(32);
+        ByteBuffer buf = ByteBuffer.allocate(MAX_LENGTH_VARLONG);
         ByteUtils.writeVarlong(value, buf);
         buf.flip();
         assertEquals(value, ByteUtils.readVarlong(buf.duplicate()));
