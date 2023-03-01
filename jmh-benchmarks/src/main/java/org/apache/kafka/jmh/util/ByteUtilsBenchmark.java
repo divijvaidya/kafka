@@ -42,7 +42,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Fork(3)
 @Warmup(iterations = 5, time = 1)
-@Measurement(iterations = 10, time = 1)
+@Measurement(iterations = 5, time = 1)
 public class ByteUtilsBenchmark {
     private static final int DATA_SET_SAMPLE_SIZE = 2048;
     private int[] randomInts;
@@ -109,12 +109,36 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarintOld(Blackhole bk) {
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarintOld(testBuffer));
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedReadVarlong(Blackhole bk) {
         for (long randomValue : this.randomLongs) {
             ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
             // prepare for reading
             testBuffer.flip();
             bk.consume(ByteUtils.readUnsignedVarlong(testBuffer));
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarlongOld(Blackhole bk) {
+        for (long randomValue : this.randomLongs) {
+            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarlongOld(testBuffer));
             testBuffer.clear();
         }
     }
@@ -130,9 +154,45 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarintOld() {
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarintOld(randomValue, testBuffer);
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarintMiddle() {
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarintMiddle(randomValue, testBuffer);
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedWriteVarlong() {
         for (long randomValue : this.randomLongs) {
             ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarlongOld() {
+        for (long randomValue : this.randomLongs) {
+            ByteUtils.writeUnsignedVarlongOld(randomValue, testBuffer);
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedWriteVarlongMiddle() {
+        for (long randomValue : this.randomLongs) {
+            ByteUtils.writeUnsignedVarlongMiddle(randomValue, testBuffer);
             testBuffer.clear();
         }
     }

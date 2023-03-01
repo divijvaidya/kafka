@@ -706,4 +706,68 @@ public final class ByteUtils {
         throw new IllegalArgumentException("Varlong is too long, most significant bit in the 10th byte is set, " +
                 "converted value: " + Long.toHexString(value));
     }
+
+    public static int readUnsignedVarintOld(ByteBuffer buffer) {
+        int value = 0;
+        int i = 0;
+        int b;
+        while (((b = buffer.get()) & 0x80) != 0) {
+            value |= (b & 0x7f) << i;
+            i += 7;
+            if (i > 28)
+                throw illegalVarintException(value);
+        }
+        value |= b << i;
+        return value;
+    }
+
+    public static long readUnsignedVarlongOld(ByteBuffer buffer)  {
+        long value = 0L;
+        int i = 0;
+        long b;
+        while (((b = buffer.get()) & 0x80) != 0) {
+            value |= (b & 0x7f) << i;
+            i += 7;
+            if (i > 63)
+                throw illegalVarlongException(value);
+        }
+        value |= b << i;
+        return value;
+    }
+
+    public static void writeUnsignedVarintOld(int value, ByteBuffer buffer) {
+        while ((value & 0xffffff80) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
+            buffer.put(b);
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
+    }
+
+    public static void writeUnsignedVarintMiddle(int value, ByteBuffer buffer) {
+        int length = sizeOfUnsignedVarint(value);
+        for (int i = 0; i < length; ++i) {
+            buffer.put((byte) ((value & 0x7F) | 0x80));
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
+    }
+
+    public static void writeUnsignedVarlongMiddle(long value, ByteBuffer buffer) {
+        int length = sizeOfUnsignedVarlong(value);
+        for (int i = 0; i < length; ++i) {
+            buffer.put((byte) ((value & 0x7F) | 0x80));
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
+    }
+
+    public static void writeUnsignedVarlongOld(long value, ByteBuffer buffer) {
+        while ((value & 0xffffffffffffff80L) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
+            buffer.put(b);
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
+    }
 }
