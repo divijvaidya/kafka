@@ -28,6 +28,7 @@ import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
@@ -49,6 +50,12 @@ public class ByteUtilsBenchmark {
     private long[] randomLongs;
     private Random random;
     private ByteBuffer testBuffer;
+
+    @Param({"1", "3", "5", "7"})
+    int lastNonZeroByteLong;
+
+    @Param({"1", "2", "3"})
+    int lastNonZeroByteInt;
 
     @Setup(Level.Trial)
     public void setUpBenchmarkLevel() {
@@ -86,12 +93,12 @@ public class ByteUtilsBenchmark {
     public void setUp() {
         randomInts = new int[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomInts[i] = generateRandomBitNumber(random, random.nextInt(30) + 1);
+            this.randomInts[i] = random.nextInt() & ((1 << (4 * lastNonZeroByteInt)) - 1);
         }
 
         randomLongs = new long[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomLongs[i] = generateRandomBitNumberLong(random, random.nextInt(60) + 1);
+            this.randomLongs[i] = random.nextLong() & ((1L << (8 * lastNonZeroByteLong)) - 1);
         }
     }
 
