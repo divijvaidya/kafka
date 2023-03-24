@@ -45,7 +45,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 5, time = 1)
 public class ByteUtilsBenchmark {
-    private static final int DATA_SET_SAMPLE_SIZE = 2048;
+    private static final int DATA_SET_SAMPLE_SIZE = 4096;
     private int[] randomInts;
     private long[] randomLongs;
     private Random random;
@@ -82,8 +82,8 @@ public class ByteUtilsBenchmark {
         return generateRandomBitNumber(random, random.nextInt(30) + 1);
     }
 
-    private static int getNextRantLong(Random random) {
-        return generateRandomBitNumber(random, random.nextInt(62) + 1);
+    private static long getNextRantLong(Random random) {
+        return generateRandomBitNumberLong(random, random.nextInt(62) + 1);
     }
 
     private static long generateRandomBitNumberLong(Random rng, int i) {
