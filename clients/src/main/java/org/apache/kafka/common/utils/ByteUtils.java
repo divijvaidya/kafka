@@ -777,19 +777,19 @@ public final class ByteUtils {
     }
 
     public static void writeUnsignedVarlongUnrolled(long value, ByteBuffer buffer) {
-        if ((value & ~0x7FL) == 0) {
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
-            if ((value & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
                 buffer.put((byte) (value >>> 7));
             } else {
                 buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
-                if ((value & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
                     buffer.put((byte) (value >>> 14));
                 } else {
                     buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
-                    if ((value & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
                         buffer.put((byte) (value >>> 21));
                     } else {
                         buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
@@ -831,7 +831,7 @@ public final class ByteUtils {
          * This implementation performs optimizations over traditional loop implementation by unrolling
          * the loop.
          */
-        if ((value & ~0x7F) == 0) {
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
