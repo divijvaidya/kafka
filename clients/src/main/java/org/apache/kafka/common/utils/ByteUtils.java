@@ -754,30 +754,30 @@ public final class ByteUtils {
     }
 
     public static void writeUnsignedVarlongHollow(long value, ByteBuffer buffer) {
-        if(value < 0)                                buffer.put((byte)0x81);
-        if(value > 0xFFFFFFFFFFFFFFL || value < 0)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
-        if(value > 0x1FFFFFFFFFFFFL || value < 0)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
-        if(value > 0x3FFFFFFFFFFL || value < 0)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
-        if(value > 0x7FFFFFFFFL || value < 0)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
-        if(value > 0xFFFFFFFL || value < 0)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
-        if(value > 0x1FFFFFL || value < 0)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
-        if(value > 0x3FFFL || value < 0)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
-        if(value > 0x7FL || value < 0)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
+        if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
+        if(value > 0xFFFFFFFFFFFFFFL)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
+        if(value > 0x1FFFFFFFFFFFFL)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
+        if(value > 0x3FFFFFFFFFFL)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
+        if(value > 0x7FFFFFFFFL)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
+        if(value > 0xFFFFFFFL)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
+        if(value > 0x1FFFFFL)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
+        if(value > 0x3FFFL)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
+        if(value > 0x7FL)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
 
         buffer.put((byte)(value & 0x7FL));
     }
 
     public static void writeUnsignedVarintHollow(long value, ByteBuffer buffer) {
-        if(value > 0x0FFFFFFF || value < 0) buffer.put((byte)(0x80 | ((value >>> 28))));
-        if(value > 0x1FFFFF || value < 0)   buffer.put((byte)(0x80 | ((value >>> 21) & 0x7F)));
-        if(value > 0x3FFF || value < 0)     buffer.put((byte)(0x80 | ((value >>> 14) & 0x7F)));
-        if(value > 0x7F || value < 0)       buffer.put((byte)(0x80 | ((value >>>  7) & 0x7F)));
+        if(value > 0x0FFFFFFF) buffer.put((byte)(0x80 | ((value >>> 28))));
+        if(value > 0x1FFFFF)   buffer.put((byte)(0x80 | ((value >>> 21) & 0x7F)));
+        if(value > 0x3FFF)     buffer.put((byte)(0x80 | ((value >>> 14) & 0x7F)));
+        if(value > 0x7F)       buffer.put((byte)(0x80 | ((value >>>  7) & 0x7F)));
 
         buffer.put((byte)(value & 0x7F));
     }
 
     public static void writeUnsignedVarlongUnrolled(long value, ByteBuffer buffer) {
-        if ((value & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
+        if ((value & ~0x7FL) == 0) {
             buffer.put((byte) value);
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
@@ -831,7 +831,7 @@ public final class ByteUtils {
          * This implementation performs optimizations over traditional loop implementation by unrolling
          * the loop.
          */
-        if ((value & (0xFFFFFFFF << 7)) == 0) {
+        if ((value & ~0x7F) == 0) {
             buffer.put((byte) value);
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
