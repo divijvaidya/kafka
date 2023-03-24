@@ -78,6 +78,14 @@ public class ByteUtilsBenchmark {
         return lowerBound + rng.nextInt(upperBound - lowerBound);
     }
 
+    private static int getNextRantInt(Random random) {
+        return generateRandomBitNumber(random, random.nextInt(30) + 1);
+    }
+
+    private static int getNextRantLong(Random random) {
+        return generateRandomBitNumber(random, random.nextInt(62) + 1);
+    }
+
     private static long generateRandomBitNumberLong(Random rng, int i) {
         long lowerBound = 1L << (i - 1);
         long upperBound = (1L << i) - 1;
@@ -93,18 +101,18 @@ public class ByteUtilsBenchmark {
     public void setUp() {
         randomInts = new int[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomInts[i] = random.nextInt() & ((1 << (4 * lastNonZeroByteInt)) - 1);
+            this.randomInts[i] = getNextRantInt(random) & ((1 << (4 * lastNonZeroByteInt)) - 1);
         }
 
         randomLongs = new long[DATA_SET_SAMPLE_SIZE];
         for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomLongs[i] = random.nextLong() & ((1L << (8 * lastNonZeroByteLong)) - 1);
+            this.randomLongs[i] = getNextRantLong(random) & ((1L << (4 * lastNonZeroByteLong)) - 1);
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarint(Blackhole bk) {
+    public void testUnsignedReadVarintNetty(Blackhole bk) {
         for (int randomValue : this.randomInts) {
             ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
             // prepare for reading
@@ -116,19 +124,31 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarintOld(Blackhole bk) {
+    public void testUnsignedReadVarintTrunk(Blackhole bk) {
         for (int randomValue : this.randomInts) {
             ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
             // prepare for reading
             testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarintOld(testBuffer));
+            bk.consume(ByteUtils.readUnsignedVarintTrunk(testBuffer));
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarlong(Blackhole bk) {
+    public void testUnsignedReadVarintProtobuf(Blackhole bk) {
+        for (int randomValue : this.randomInts) {
+            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+            // prepare for reading
+            testBuffer.flip();
+            bk.consume(ByteUtils.readUnsignedVarintProtoBuf(testBuffer));
+            testBuffer.clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarlongUnrolled(Blackhole bk) {
         for (long randomValue : this.randomLongs) {
             ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
             // prepare for reading
@@ -140,71 +160,70 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarlongOld(Blackhole bk) {
+    public void testUnsignedReadVarlongTrunk(Blackhole bk) {
         for (long randomValue : this.randomLongs) {
             ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
             // prepare for reading
             testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarlongOld(testBuffer));
+            bk.consume(ByteUtils.readUnsignedVarlongTrunk(testBuffer));
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarint() {
+    public void testUnsignedWriteVarintUnrolled() {
         for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarintUnrolled(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintOld() {
+    public void testUnsignedWriteVarintTrunk() {
         for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarintOld(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarintTrunk(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintMiddle() {
+    public void testUnsignedWriteVarintHollow() {
         for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarintMiddle(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarintHollow(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlong() {
+    public void testUnsignedWriteVarlongUnrolled() {
         for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarlongUnrolled(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongOld() {
+    public void testUnsignedWriteVarlongTrunk() {
         for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlongOld(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarlongTrunk(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongMiddle() {
+    public void testUnsignedWriteVarlongHollow() {
         for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlongMiddle(randomValue, testBuffer);
+            ByteUtils.writeUnsignedVarlongHollow(randomValue, testBuffer);
             testBuffer.clear();
         }
     }
 
-    @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarint(Blackhole bk) {
         for (int randomValue : this.randomInts) {
@@ -212,7 +231,6 @@ public class ByteUtilsBenchmark {
         }
     }
 
-    @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarintSimple(Blackhole bk) {
         for (int randomValue : this.randomInts) {
@@ -226,7 +244,6 @@ public class ByteUtilsBenchmark {
         }
     }
 
-    @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testSizeOfUnsignedVarlong(Blackhole bk) {
         for (long randomValue : this.randomLongs) {

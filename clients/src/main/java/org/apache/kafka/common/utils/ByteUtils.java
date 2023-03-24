@@ -707,7 +707,7 @@ public final class ByteUtils {
                 "converted value: " + Long.toHexString(value));
     }
 
-    public static int readUnsignedVarintOld(ByteBuffer buffer) {
+    public static int readUnsignedVarintTrunk(ByteBuffer buffer) {
         int value = 0;
         int i = 0;
         int b;
@@ -721,7 +721,7 @@ public final class ByteUtils {
         return value;
     }
 
-    public static long readUnsignedVarlongOld(ByteBuffer buffer)  {
+    public static long readUnsignedVarlongTrunk(ByteBuffer buffer)  {
         long value = 0L;
         int i = 0;
         long b;
@@ -735,7 +735,7 @@ public final class ByteUtils {
         return value;
     }
 
-    public static void writeUnsignedVarintOld(int value, ByteBuffer buffer) {
+    public static void writeUnsignedVarintTrunk(int value, ByteBuffer buffer) {
         while ((value & 0xffffff80) != 0L) {
             byte b = (byte) ((value & 0x7f) | 0x80);
             buffer.put(b);
@@ -744,25 +744,7 @@ public final class ByteUtils {
         buffer.put((byte) value);
     }
 
-    public static void writeUnsignedVarintMiddle(int value, ByteBuffer buffer) {
-        int length = sizeOfUnsignedVarint(value);
-        for (int i = 0; i < length; ++i) {
-            buffer.put((byte) ((value & 0x7F) | 0x80));
-            value >>>= 7;
-        }
-        buffer.put((byte) value);
-    }
-
-    public static void writeUnsignedVarlongMiddle(long value, ByteBuffer buffer) {
-        int length = sizeOfUnsignedVarlong(value);
-        for (int i = 0; i < length; ++i) {
-            buffer.put((byte) ((value & 0x7F) | 0x80));
-            value >>>= 7;
-        }
-        buffer.put((byte) value);
-    }
-
-    public static void writeUnsignedVarlongOld(long value, ByteBuffer buffer) {
+    public static void writeUnsignedVarlongTrunk(long value, ByteBuffer buffer) {
         while ((value & 0xffffffffffffff80L) != 0L) {
             byte b = (byte) ((value & 0x7f) | 0x80);
             buffer.put(b);
@@ -770,4 +752,148 @@ public final class ByteUtils {
         }
         buffer.put((byte) value);
     }
+
+    public static void writeUnsignedVarlongHollow(long value, ByteBuffer buffer) {
+        if(value < 0)                                buffer.put((byte)0x81);
+        if(value > 0xFFFFFFFFFFFFFFL || value < 0)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
+        if(value > 0x1FFFFFFFFFFFFL || value < 0)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
+        if(value > 0x3FFFFFFFFFFL || value < 0)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
+        if(value > 0x7FFFFFFFFL || value < 0)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
+        if(value > 0xFFFFFFFL || value < 0)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
+        if(value > 0x1FFFFFL || value < 0)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
+        if(value > 0x3FFFL || value < 0)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
+        if(value > 0x7FL || value < 0)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
+
+        buffer.put((byte)(value & 0x7FL));
+    }
+
+    public static void writeUnsignedVarintHollow(long value, ByteBuffer buffer) {
+        if(value > 0x0FFFFFFF || value < 0) buffer.put((byte)(0x80 | ((value >>> 28))));
+        if(value > 0x1FFFFF || value < 0)   buffer.put((byte)(0x80 | ((value >>> 21) & 0x7F)));
+        if(value > 0x3FFF || value < 0)     buffer.put((byte)(0x80 | ((value >>> 14) & 0x7F)));
+        if(value > 0x7F || value < 0)       buffer.put((byte)(0x80 | ((value >>>  7) & 0x7F)));
+
+        buffer.put((byte)(value & 0x7F));
+    }
+
+    public static void writeUnsignedVarlongUnrolled(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            buffer.put((byte) (value >>> 28));
+                        } else {
+                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
+                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                buffer.put((byte) (value >>> 35));
+                            } else {
+                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
+                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    buffer.put((byte) (value >>> 42));
+                                } else {
+                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
+                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        buffer.put((byte) (value >>> 49));
+                                    } else {
+                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
+                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            buffer.put((byte) (value >>> 56));
+                                        } else {
+                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
+                                            buffer.put((byte) (value >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public static void writeUnsignedVarintUnrolled(int value, ByteBuffer buffer) {
+        /*
+         * Implementation notes:
+         * This implementation performs optimizations over traditional loop implementation by unrolling
+         * the loop.
+         */
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) ((value >>> 7) & 0xFF));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) ((value >>> 14) & 0xFF));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) ((value >>> 21) & 0xFF));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        buffer.put((byte) ((value >>> 28) & 0xFF));
+                    }
+                }
+            }
+        }
+    }
+
+    public static int readUnsignedVarintProtoBuf(ByteBuffer buf) {
+        fastpath:
+        {
+            int tempPos = buf.position();
+            int limit = buf.limit();
+
+            if (limit == tempPos) {
+                break fastpath;
+            }
+
+            final byte[] buffer = buf.array();
+            int x;
+            if ((x = buffer[tempPos++]) >= 0) {
+                buf.position(tempPos);
+                return x;
+            } else if (limit - tempPos < 9) {
+                break fastpath;
+            } else if ((x ^= (buffer[tempPos++] << 7)) < 0) {
+                x ^= (~0 << 7);
+            } else if ((x ^= (buffer[tempPos++] << 14)) >= 0) {
+                x ^= (~0 << 7) ^ (~0 << 14);
+            } else if ((x ^= (buffer[tempPos++] << 21)) < 0) {
+                x ^= (~0 << 7) ^ (~0 << 14) ^ (~0 << 21);
+            } else {
+                int y = buffer[tempPos++];
+                x ^= y << 28;
+                x ^= (~0 << 7) ^ (~0 << 14) ^ (~0 << 21) ^ (~0 << 28);
+                if (y < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0) {
+                    break fastpath; // Will throw malformedVarint()
+                }
+            }
+            buf.position(tempPos);
+            return x;
+        }
+        return readUnsignedVarintTrunk(buf);
+    }
+
 }
