@@ -145,6 +145,9 @@ public final class ByteUtils {
      * Read an integer stored in variable-length format using unsigned decoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>.
      *
+     * The implementation is based on Netty's decoding of varint.
+     * @see <a href="https://github.com/netty/netty/blob/59aa6e635b9996cf21cd946e64353270679adc73/codec/src/main/java/io/netty/handler/codec/protobuf/ProtobufVarint32FrameDecoder.java#L73">Netty's varint decoding</a>
+     *
      * @param buffer The buffer to read from
      * @return The integer read
      *
@@ -182,6 +185,9 @@ public final class ByteUtils {
     /**
      * Read an integer stored in variable-length format using unsigned decoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>.
+     *
+     * The implementation is based on Netty's decoding of varint.
+     * @see <a href="https://github.com/netty/netty/blob/59aa6e635b9996cf21cd946e64353270679adc73/codec/src/main/java/io/netty/handler/codec/protobuf/ProtobufVarint32FrameDecoder.java#L73">Netty's varint decoding</a>
      *
      * @param in The input to read from
      * @return The integer read
@@ -281,40 +287,46 @@ public final class ByteUtils {
                         result |= tmp << 21;
                     } else {
                         result |= (tmp & 0x7f) << 21;
-                        if ((tmp = in.readByte()) >= 0) {
-                            result |= (long) tmp << 28;
-                        } else {
-                            result |= (long) (tmp & 0x7f) << 28;
-                            if ((tmp = in.readByte()) >= 0) {
-                                result |= (long) tmp << 35;
-                            } else {
-                                result |= (long) (tmp & 0x7f) << 35;
-                                if ((tmp = in.readByte()) >= 0) {
-                                    result |= (long) tmp << 42;
-                                } else {
-                                    result |= (long) (tmp & 0x7f) << 42;
-                                    if ((tmp = in.readByte()) >= 0) {
-                                        result |= (long) tmp << 49;
-                                    } else {
-                                        result |= (long) (tmp & 0x7f) << 49;
-                                        if ((tmp = in.readByte()) >= 0) {
-                                            result |= (long) tmp << 56;
-                                        } else {
-                                            result |= (long) (tmp & 0x7f) << 56;
-                                            result |= (long) (tmp = in.readByte()) << 63;
-                                            if (tmp < 0) {
-                                                throw illegalVarlongException(result);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        result = innerReadUnsignedVarLong(in, result);
                     }
                 }
             }
             return result;
         }
+    }
+
+    private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
+        byte tmp;
+        if ((tmp = in.readByte()) >= 0) {
+            result |= (long) tmp << 28;
+        } else {
+            result |= (long) (tmp & 0x7f) << 28;
+            if ((tmp = in.readByte()) >= 0) {
+                result |= (long) tmp << 35;
+            } else {
+                result |= (long) (tmp & 0x7f) << 35;
+                if ((tmp = in.readByte()) >= 0) {
+                    result |= (long) tmp << 42;
+                } else {
+                    result |= (long) (tmp & 0x7f) << 42;
+                    if ((tmp = in.readByte()) >= 0) {
+                        result |= (long) tmp << 49;
+                    } else {
+                        result |= (long) (tmp & 0x7f) << 49;
+                        if ((tmp = in.readByte()) >= 0) {
+                            result |= (long) tmp << 56;
+                        } else {
+                            result |= (long) (tmp & 0x7f) << 56;
+                            result |= (long) (tmp = in.readByte()) << 63;
+                            if (tmp < 0) {
+                                throw illegalVarlongException(result);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -415,28 +427,23 @@ public final class ByteUtils {
      * @param buffer The output to write to
      */
     public static void writeUnsignedVarint(int value, ByteBuffer buffer) {
-        /*
-         * Implementation notes:
-         * This implementation performs optimizations over traditional loop implementation by unrolling
-         * the loop.
-         */
         if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
             if ((value & (0xFFFFFFFF << 14)) == 0) {
-                buffer.put((byte) ((value >>> 7) & 0xFF));
+                buffer.put((byte) (value >>> 7));
             } else {
                 buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
                 if ((value & (0xFFFFFFFF << 21)) == 0) {
-                    buffer.put((byte) ((value >>> 14) & 0xFF));
+                    buffer.put((byte) (value >>> 14));
                 } else {
                     buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
                     if ((value & (0xFFFFFFFF << 28)) == 0) {
-                        buffer.put((byte) ((value >>> 21) & 0xFF));
+                        buffer.put((byte) (value >>> 21));
                     } else {
                         buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
-                        buffer.put((byte) ((value >>> 28) & 0xFF));
+                        buffer.put((byte) (value >>> 28));
                     }
                 }
             }
@@ -506,57 +513,22 @@ public final class ByteUtils {
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
      * into the output.
      *
-     * @param value The value to write
+     * @param v The value to write
      * @param out The output to write to
      */
-    public static void writeVarlong(long value, DataOutput out) throws IOException {
-        long v = (value << 1) ^ (value >> 63);
-        if ((v & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
-            out.writeByte((byte) v);
-        } else {
-            out.writeByte((byte) (v & 0x7F | 0x80));
-            if ((v & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
-                out.writeByte((byte) (v >>> 7));
-            } else {
-                out.writeByte((byte) ((v >>> 7) & 0x7F | 0x80));
-                if ((v & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
-                    out.writeByte((byte) (v >>> 14));
-                } else {
-                    out.writeByte((byte) ((v >>> 14) & 0x7F | 0x80));
-                    if ((v & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
-                        out.writeByte((byte) (v >>> 21));
-                    } else {
-                        out.writeByte((byte) ((v >>> 21) & 0x7F | 0x80));
-                        if ((v & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
-                            out.writeByte((byte) (v >>> 28));
-                        } else {
-                            out.writeByte((byte) ((v >>> 28) & 0x7F | 0x80));
-                            if ((v & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
-                                out.writeByte((byte) (v >>> 35));
-                            } else {
-                                out.writeByte((byte) ((v >>> 35) & 0x7F | 0x80));
-                                if ((v & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
-                                    out.writeByte((byte) (v >>> 42));
-                                } else {
-                                    out.writeByte((byte) ((v >>> 42) & 0x7F | 0x80));
-                                    if ((v & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
-                                        out.writeByte((byte) (v >>> 49));
-                                    } else {
-                                        out.writeByte((byte) ((v >>> 49) & 0x7F | 0x80));
-                                        if ((v & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
-                                            out.writeByte((byte) (v >>> 56));
-                                        } else {
-                                            out.writeByte((byte) ((v >>> 56) & 0x7F | 0x80));
-                                            out.writeByte((byte) (v >>> 63));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    public static void writeVarlong(long v, DataOutput out) throws IOException {
+        long value = (v << 1) ^ (v >> 63);
+        if(value > 0x7FFFFFFFFFFFFFFFL) out.writeByte((byte)(0x80 | (value >>> 63)));
+        if(value > 0xFFFFFFFFFFFFFFL)   out.writeByte((byte)(0x80 | ((value >>> 56) & 0x7FL)));
+        if(value > 0x1FFFFFFFFFFFFL)    out.writeByte((byte)(0x80 | ((value >>> 49) & 0x7FL)));
+        if(value > 0x3FFFFFFFFFFL)      out.writeByte((byte)(0x80 | ((value >>> 42) & 0x7FL)));
+        if(value > 0x7FFFFFFFFL)        out.writeByte((byte)(0x80 | ((value >>> 35) & 0x7FL)));
+        if(value > 0xFFFFFFFL)          out.writeByte((byte)(0x80 | ((value >>> 28) & 0x7FL)));
+        if(value > 0x1FFFFFL)           out.writeByte((byte)(0x80 | ((value >>> 21) & 0x7FL)));
+        if(value > 0x3FFFL)             out.writeByte((byte)(0x80 | ((value >>> 14) & 0x7FL)));
+        if(value > 0x7FL)               out.writeByte((byte)(0x80 | ((value >>>  7) & 0x7FL)));
+
+        out.writeByte((byte)(value & 0x7FL));
     }
 
     /**
@@ -572,54 +544,23 @@ public final class ByteUtils {
         writeUnsignedVarlong(v, buffer);
     }
 
-    // visible for benchmarking
+    /**
+     * Based on an implementation in Netflix's Hollow repository. The only difference is to
+     * extend the implementation of Unsigned Long instead of signed Long present in Hollow.
+     * @see https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
+     */
     public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
-        if ((value & (0xFFFFFFFFFFFFFFFFL << 7)) == 0) {
-            buffer.put((byte) value);
-        } else {
-            buffer.put((byte) (value & 0x7F | 0x80));
-            if ((value & (0xFFFFFFFFFFFFFFFFL << 14)) == 0) {
-                buffer.put((byte) (value >>> 7));
-            } else {
-                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
-                if ((value & (0xFFFFFFFFFFFFFFFFL << 21)) == 0) {
-                    buffer.put((byte) (value >>> 14));
-                } else {
-                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
-                    if ((value & (0xFFFFFFFFFFFFFFFFL << 28)) == 0) {
-                        buffer.put((byte) (value >>> 21));
-                    } else {
-                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
-                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
-                            buffer.put((byte) (value >>> 28));
-                        } else {
-                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
-                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
-                                buffer.put((byte) (value >>> 35));
-                            } else {
-                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
-                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
-                                    buffer.put((byte) (value >>> 42));
-                                } else {
-                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
-                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
-                                        buffer.put((byte) (value >>> 49));
-                                    } else {
-                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
-                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
-                                            buffer.put((byte) (value >>> 56));
-                                        } else {
-                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
-                                            buffer.put((byte) (value >>> 63));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
+        if(value > 0xFFFFFFFFFFFFFFL)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
+        if(value > 0x1FFFFFFFFFFFFL)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
+        if(value > 0x3FFFFFFFFFFL)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
+        if(value > 0x7FFFFFFFFL)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
+        if(value > 0xFFFFFFFL)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
+        if(value > 0x1FFFFFL)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
+        if(value > 0x3FFFL)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
+        if(value > 0x7FL)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
+
+        buffer.put((byte)(value & 0x7FL));
     }
 
     /**

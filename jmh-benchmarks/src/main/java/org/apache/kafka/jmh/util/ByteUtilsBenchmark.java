@@ -40,12 +40,12 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Fork(1)
-@Warmup(iterations = 1, time = 1)
-@Measurement(iterations = 1, time = 1)
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 public class ByteUtilsBenchmark {
-    private static final int DATA_SET_SAMPLE_SIZE = 4096;
+    private static final int DATA_SET_SAMPLE_SIZE = 16384;
 
     @State(Scope.Benchmark)
     public static class BaseBenchmarkState {
@@ -64,9 +64,9 @@ public class ByteUtilsBenchmark {
             testBuffer = ByteBuffer.allocate(10);
         }
 
-        long generateRandomBitNumberLong(int i) {
-            long lowerBound = 1L << ((i - 1) * 8);
-            long upperBound = (1L << (i * 8)) - 1;
+        long generateRandomLongWithExactBytesSet(int bytesSet) {
+            long lowerBound = 1L << ((bytesSet - 1) * 8);
+            long upperBound = (1L << (bytesSet * 8)) - 1;
             if (lowerBound >= upperBound) {
                 throw new IllegalArgumentException();
             }
@@ -75,9 +75,9 @@ public class ByteUtilsBenchmark {
                     .orElseThrow(() -> new IllegalStateException("Unable to create a random long in the range=[" + lowerBound + ", " + upperBound + "]"));
         }
 
-        int generateRandomBitNumber(int i) {
-            int lowerBound = 1 << ((i - 1) * 8);
-            int upperBound = (1 << (i * 8)) - 1;
+        int generateRandomIntWithExactBytesSet(int bytesSet) {
+            int lowerBound = 1 << ((bytesSet - 1) * 8);
+            int upperBound = (1 << (bytesSet * 8)) - 1;
             if (lowerBound >= upperBound) {
                 throw new IllegalArgumentException();
             }
@@ -100,7 +100,7 @@ public class ByteUtilsBenchmark {
         public void setup() {
             randomLongs = new long[DATA_SET_SAMPLE_SIZE];
             for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-                this.randomLongs[i] = generateRandomBitNumberLong(numNonZeroBytes);
+                this.randomLongs[i] = generateRandomLongWithExactBytesSet(numNonZeroBytes);
             }
         }
 
@@ -119,10 +119,7 @@ public class ByteUtilsBenchmark {
         public void setup() {
             randomInts = new int[DATA_SET_SAMPLE_SIZE];
             for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-                /*
-                 *
-                 */
-                this.randomInts[i] = generateRandomBitNumber(numNonZeroBytes);
+                this.randomInts[i] = generateRandomIntWithExactBytesSet(numNonZeroBytes);
             }
         }
 
@@ -187,6 +184,18 @@ public class ByteUtilsBenchmark {
             // prepare for reading
             state.getTestBuffer().flip();
             bk.consume(ByteUtilsBenchmark.readUnsignedVarlongLegacy(state.getTestBuffer()));
+            state.getTestBuffer().clear();
+        }
+    }
+
+    @Benchmark
+    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
+    public void testUnsignedReadVarlongAvro(IterationStateForLong state, Blackhole bk) {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarlong(randomValue, state.getTestBuffer());
+            // prepare for reading
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarLongAvro(state.getTestBuffer()));
             state.getTestBuffer().clear();
         }
     }
@@ -397,6 +406,68 @@ public class ByteUtilsBenchmark {
         }
     }
 
+    private static long readUnsignedVarLongAvro(ByteBuffer buffer) {
+        int b = buffer.get() & 0xff;
+        int n = b & 0x7f;
+        long l;
+        if (b > 0x7f) {
+            b = buffer.get() & 0xff;
+            n ^= (b & 0x7f) << 7;
+            if (b > 0x7f) {
+                b = buffer.get() & 0xff;
+                n ^= (b & 0x7f) << 14;
+                if (b > 0x7f) {
+                    b = buffer.get() & 0xff;
+                    n ^= (b & 0x7f) << 21;
+                    if (b > 0x7f) {
+                        // only the low 28 bits can be set, so this won't carry
+                        // the sign bit to the long
+                        l = innerLongDecode((long) n, buffer);
+                    } else {
+                        l = n;
+                    }
+                } else {
+                    l = n;
+                }
+            } else {
+                l = n;
+            }
+        } else {
+            l = n;
+        }
+
+        return l;
+    }
+    private static long innerLongDecode(long l, ByteBuffer buffer) {
+        int len = 1;
+        int b = buffer.get() & 0xff;
+        l ^= (b & 0x7fL) << 28;
+        if (b > 0x7f) {
+            b = buffer.get() & 0xff;
+            l ^= (b & 0x7fL) << 35;
+            if (b > 0x7f) {
+                b = buffer.get() & 0xff;
+                l ^= (b & 0x7fL) << 42;
+                if (b > 0x7f) {
+                    b = buffer.get() & 0xff;
+                    l ^= (b & 0x7fL) << 49;
+                    if (b > 0x7f) {
+                        b = buffer.get() & 0xff;
+                        l ^= (b & 0x7fL) << 56;
+                        if (b > 0x7f) {
+                            b = buffer.get() & 0xff;
+                            l ^= (b & 0x7fL) << 63;
+                            if (b > 0x7f) {
+                                throw new IllegalArgumentException("Invalid long encoding");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return l;
+    }
+
     /**
      * Implementation extended from Int implementation from Netty
      * see: https://github.com/netty/netty/blob/59aa6e635b9996cf21cd946e64353270679adc73/codec/src/main/java/io/netty/handler/codec/protobuf/ProtobufVarint32FrameDecoder.java#L73
@@ -423,36 +494,42 @@ public class ByteUtilsBenchmark {
                             result |= (long) tmp << 28;
                         } else {
                             result |= (long) (tmp & 0x7f) << 28;
-                            if ((tmp = buffer.get()) >= 0) {
-                                result |= (long) tmp << 35;
-                            } else {
-                                result |= (long) (tmp & 0x7f) << 35;
-                                if ((tmp = buffer.get()) >= 0) {
-                                    result |= (long) tmp << 42;
-                                } else {
-                                    result |= (long) (tmp & 0x7f) << 42;
-                                    if ((tmp = buffer.get()) >= 0) {
-                                        result |= (long) tmp << 49;
-                                    } else {
-                                        result |= (long) (tmp & 0x7f) << 49;
-                                        if ((tmp = buffer.get()) >= 0) {
-                                            result |= (long) tmp << 56;
-                                        } else {
-                                            result |= (long) (tmp & 0x7f) << 56;
-                                            result |= (long) (tmp = buffer.get()) << 63;
-                                            if (tmp < 0) {
-                                                throw new IllegalArgumentException();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            result = innerUnsignedReadVarLong(buffer, result);
                         }
                     }
                 }
             }
             return result;
         }
+    }
+
+    private static long innerUnsignedReadVarLong(ByteBuffer buffer, long result) {
+        byte tmp;
+        if ((tmp = buffer.get()) >= 0) {
+            result |= (long) tmp << 35;
+        } else {
+            result |= (long) (tmp & 0x7f) << 35;
+            if ((tmp = buffer.get()) >= 0) {
+                result |= (long) tmp << 42;
+            } else {
+                result |= (long) (tmp & 0x7f) << 42;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= (long) tmp << 49;
+                } else {
+                    result |= (long) (tmp & 0x7f) << 49;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= (long) tmp << 56;
+                    } else {
+                        result |= (long) (tmp & 0x7f) << 56;
+                        result |= (long) (tmp = buffer.get()) << 63;
+                        if (tmp < 0) {
+                            throw new IllegalArgumentException();
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /*
