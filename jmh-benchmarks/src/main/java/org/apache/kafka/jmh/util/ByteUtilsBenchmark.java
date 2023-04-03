@@ -17,8 +17,9 @@
 
 package org.apache.kafka.jmh.util;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.common.utils.ByteUtils;
@@ -39,201 +40,221 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-@State(Scope.Benchmark)
-@OutputTimeUnit(TimeUnit.SECONDS)
-@Fork(3)
-@Warmup(iterations = 5, time = 1)
-@Measurement(iterations = 5, time = 1)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@Fork(1)
+@Warmup(iterations = 1, time = 1)
+@Measurement(iterations = 1, time = 1)
 public class ByteUtilsBenchmark {
     private static final int DATA_SET_SAMPLE_SIZE = 4096;
-    private int[] randomInts;
-    private long[] randomLongs;
-    private Random random;
-    private ByteBuffer testBuffer;
 
-    @Param({"1", "3", "5", "7"})
-    int lastNonZeroByteLong;
-
-    @Param({"1", "2", "3"})
-    int lastNonZeroByteInt;
-
-    @Setup(Level.Trial)
-    public void setUpBenchmarkLevel() {
-        // Initialize the random number generator with a seed so that for each benchmark it produces the same sequence
-        // of random numbers. Note that it is important to initialize it again with the seed before every benchmark.
-        random = new Random(1337);
-    }
-
-    @Setup(Level.Invocation)
-    public void setUpInvocationBuffer() {
-        testBuffer = ByteBuffer.allocate(10);
-    }
-
-    private static int generateRandomBitNumber(Random rng, int i) {
-        int lowerBound = 1 << (i - 1);
-        int upperBound = (1 << i) - 1;
-        if (lowerBound == upperBound) {
-            return lowerBound;
-        }
-        return lowerBound + rng.nextInt(upperBound - lowerBound);
-    }
-
-    private static int getNextRantInt(Random random) {
-        return generateRandomBitNumber(random, random.nextInt(30) + 1);
-    }
-
-    private static long getNextRantLong(Random random) {
-        return generateRandomBitNumberLong(random, random.nextInt(62) + 1);
-    }
-
-    private static long generateRandomBitNumberLong(Random rng, int i) {
-        long lowerBound = 1L << (i - 1);
-        long upperBound = (1L << i) - 1;
-        if (lowerBound == upperBound) {
-            return lowerBound;
-        }
-        return lowerBound +
-            rng.longs(lowerBound, upperBound).findFirst()
-                .orElseThrow(() -> new IllegalStateException("Unable to create a random long in the range=[" + lowerBound + ", " + upperBound + "]"));
-    }
-
-    @Setup(Level.Iteration)
-    public void setUp() {
-        randomInts = new int[DATA_SET_SAMPLE_SIZE];
-        for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomInts[i] = getNextRantInt(random) & ((1 << (4 * lastNonZeroByteInt)) - 1);
+    @State(Scope.Benchmark)
+    public static class BaseBenchmarkState {
+        private ByteBuffer testBuffer;
+        private SecureRandom random;
+        @Setup(Level.Trial)
+        public void setUpBenchmarkLevel() {
+            // Initialize the random number generator with a seed so that for each benchmark it produces the same sequence
+            // of random numbers. Note that it is important to initialize it again with the seed before every benchmark.
+            random = new SecureRandom();
+            random.setSeed(133713371337L);
         }
 
-        randomLongs = new long[DATA_SET_SAMPLE_SIZE];
-        for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
-            this.randomLongs[i] = getNextRantLong(random) & ((1L << (4 * lastNonZeroByteLong)) - 1);
+        @Setup(Level.Invocation)
+        public void setUpInvocationBuffer() {
+            testBuffer = ByteBuffer.allocate(10);
+        }
+
+        long generateRandomBitNumberLong(int i) {
+            long lowerBound = 1L << ((i - 1) * 8);
+            long upperBound = (1L << (i * 8)) - 1;
+            if (lowerBound >= upperBound) {
+                throw new IllegalArgumentException();
+            }
+            return lowerBound +
+                random.longs(lowerBound, upperBound).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Unable to create a random long in the range=[" + lowerBound + ", " + upperBound + "]"));
+        }
+
+        int generateRandomBitNumber(int i) {
+            int lowerBound = 1 << ((i - 1) * 8);
+            int upperBound = (1 << (i * 8)) - 1;
+            if (lowerBound >= upperBound) {
+                throw new IllegalArgumentException();
+            }
+            return lowerBound + random.nextInt(upperBound - lowerBound);
+        }
+
+        public ByteBuffer getTestBuffer() {
+            return testBuffer;
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class IterationStateForLong extends BaseBenchmarkState {
+        @Param({"1", "3", "5", "7"})
+        int numNonZeroBytes;
+
+        private long[] randomLongs;
+
+        @Setup(Level.Iteration)
+        public void setup() {
+            randomLongs = new long[DATA_SET_SAMPLE_SIZE];
+            for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
+                this.randomLongs[i] = generateRandomBitNumberLong(numNonZeroBytes);
+            }
+        }
+
+        public long[] getRandomValues() {
+            return randomLongs;
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class IterationStateForInt extends BaseBenchmarkState {
+        @Param({"1", "2", "3"})
+        int numNonZeroBytes;
+        private int[] randomInts;
+
+        @Setup(Level.Iteration)
+        public void setup() {
+            randomInts = new int[DATA_SET_SAMPLE_SIZE];
+            for (int i = 0; i < DATA_SET_SAMPLE_SIZE; i++) {
+                /*
+                 *
+                 */
+                this.randomInts[i] = generateRandomBitNumber(numNonZeroBytes);
+            }
+        }
+
+        public int[] getRandomValues() {
+            return randomInts;
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarintNetty(Blackhole bk) {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+    public void testUnsignedReadVarintNetty(IterationStateForInt state, Blackhole bk) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarint(randomValue, state.getTestBuffer());
             // prepare for reading
-            testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarint(testBuffer));
-            testBuffer.clear();
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarintNetty(state.getTestBuffer()));
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarintTrunk(Blackhole bk) {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+    public void testUnsignedReadVarintLegacy(IterationStateForInt state, Blackhole bk) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarint(randomValue, state.getTestBuffer());
             // prepare for reading
-            testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarintTrunk(testBuffer));
-            testBuffer.clear();
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarintLegacy(state.getTestBuffer()));
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarintProtobuf(Blackhole bk) {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarint(randomValue, testBuffer);
+    public void testUnsignedReadVarintProtobuf(IterationStateForInt state, Blackhole bk) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarint(randomValue, state.getTestBuffer());
             // prepare for reading
-            testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarintProtoBuf(testBuffer));
-            testBuffer.clear();
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarintProtoBuf(state.getTestBuffer()));
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarlongUnrolled(Blackhole bk) {
-        for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
+    public void testUnsignedReadVarlongUnrolled(IterationStateForLong state, Blackhole bk) throws IOException {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarlong(randomValue, state.getTestBuffer());
             // prepare for reading
-            testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarlong(testBuffer));
-            testBuffer.clear();
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarlongNetty(state.getTestBuffer()));
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarlongTrunk(Blackhole bk) {
-        for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlong(randomValue, testBuffer);
+    public void testUnsignedReadVarlongLegacy(IterationStateForLong state, Blackhole bk) {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtils.writeUnsignedVarlong(randomValue, state.getTestBuffer());
             // prepare for reading
-            testBuffer.flip();
-            bk.consume(ByteUtils.readUnsignedVarlongTrunk(testBuffer));
-            testBuffer.clear();
+            state.getTestBuffer().flip();
+            bk.consume(ByteUtilsBenchmark.readUnsignedVarlongLegacy(state.getTestBuffer()));
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintUnrolled() {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarintUnrolled(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarintUnrolled(IterationStateForInt state) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarintUnrolled(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintTrunk() {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarintTrunk(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarintLegacy(IterationStateForInt state) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarintLegacy(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintHollow() {
-        for (int randomValue : this.randomInts) {
-            ByteUtils.writeUnsignedVarintHollow(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarintHollow(IterationStateForInt state) {
+        for (int randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarintHollow(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongUnrolled() {
-        for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlongUnrolled(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarlongUnrolled(IterationStateForLong state) {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarlongUnrolled(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongTrunk() {
-        for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlongTrunk(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarlongLegacy(IterationStateForLong state) {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarlongLegacy(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongHollow() {
-        for (long randomValue : this.randomLongs) {
-            ByteUtils.writeUnsignedVarlongHollow(randomValue, testBuffer);
-            testBuffer.clear();
+    public void testUnsignedWriteVarlongHollow(IterationStateForLong state) {
+        for (long randomValue : state.getRandomValues()) {
+            ByteUtilsBenchmark.writeUnsignedVarlongHollow(randomValue, state.getTestBuffer());
+            state.getTestBuffer().clear();
         }
     }
 
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testSizeOfUnsignedVarint(Blackhole bk) {
-        for (int randomValue : this.randomInts) {
+    public void testSizeOfUnsignedVarint(IterationStateForInt state, Blackhole bk) {
+        for (int randomValue : state.getRandomValues()) {
             bk.consume(ByteUtils.sizeOfUnsignedVarint(randomValue));
         }
     }
 
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testSizeOfUnsignedVarintSimple(Blackhole bk) {
-        for (int randomValue : this.randomInts) {
+    public void testSizeOfUnsignedVarintSimple(IterationStateForInt state, Blackhole bk) {
+        for (int randomValue : state.getRandomValues()) {
             int value = randomValue;
             int bytes = 1;
             while ((value & 0xffffff80) != 0L) {
@@ -245,8 +266,8 @@ public class ByteUtilsBenchmark {
     }
 
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testSizeOfUnsignedVarlong(Blackhole bk) {
-        for (long randomValue : this.randomLongs) {
+    public void testSizeOfUnsignedVarlong(IterationStateForLong state, Blackhole bk) {
+        for (long randomValue : state.getRandomValues()) {
             bk.consume(ByteUtils.sizeOfUnsignedVarlong(randomValue));
         }
     }
@@ -258,5 +279,323 @@ public class ByteUtilsBenchmark {
                 .build();
 
         new Runner(opt).run();
+    }
+
+
+    /******************* Implementations **********************/
+
+    /*
+     * Implementation in Trunk as of Apr 2023 / v3.4
+     */
+    private static int readUnsignedVarintLegacy(ByteBuffer buffer) {
+        int value = 0;
+        int i = 0;
+        int b;
+        while (((b = buffer.get()) & 0x80) != 0) {
+            value |= (b & 0x7f) << i;
+            i += 7;
+            if (i > 28)
+                throw new IllegalArgumentException();
+        }
+        value |= b << i;
+        return value;
+    }
+
+    /*
+     * Implementation in Trunk as of Apr 2023 / v3.4
+     */
+    private static long readUnsignedVarlongLegacy(ByteBuffer buffer)  {
+        long value = 0L;
+        int i = 0;
+        long b;
+        while (((b = buffer.get()) & 0x80) != 0) {
+            value |= (b & 0x7f) << i;
+            i += 7;
+            if (i > 63)
+                throw new IllegalArgumentException();
+        }
+        value |= b << i;
+        return value;
+    }
+
+    /**
+     * Implementation copied from Protobuf's implementation.
+     * see: https://github.com/protocolbuffers/protobuf/blob/f1c7820c9bd0e31f8b7d091092851441ad2716b6/java/core/src/main/java/com/google/protobuf/CodedInputStream.java#L1048
+     */
+    private static int readUnsignedVarintProtoBuf(ByteBuffer buf) {
+        fastpath:
+        {
+            int tempPos = buf.position();
+            int limit = buf.limit();
+
+            if (limit == tempPos) {
+                break fastpath;
+            }
+
+            final byte[] buffer = buf.array();
+            int x;
+            if ((x = buffer[tempPos++]) >= 0) {
+                buf.position(tempPos);
+                return x;
+            } else if (limit - tempPos < 9) {
+                break fastpath;
+            } else if ((x ^= (buffer[tempPos++] << 7)) < 0) {
+                x ^= (~0 << 7);
+            } else if ((x ^= (buffer[tempPos++] << 14)) >= 0) {
+                x ^= (~0 << 7) ^ (~0 << 14);
+            } else if ((x ^= (buffer[tempPos++] << 21)) < 0) {
+                x ^= (~0 << 7) ^ (~0 << 14) ^ (~0 << 21);
+            } else {
+                int y = buffer[tempPos++];
+                x ^= y << 28;
+                x ^= (~0 << 7) ^ (~0 << 14) ^ (~0 << 21) ^ (~0 << 28);
+                if (y < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0
+                    && buffer[tempPos++] < 0) {
+                    break fastpath; // Will throw malformedVarint()
+                }
+            }
+            buf.position(tempPos);
+            return x;
+        }
+        return readUnsignedVarintLegacy(buf);
+    }
+
+    /**
+     * Implementation copied from Netty
+     * see: https://github.com/netty/netty/blob/59aa6e635b9996cf21cd946e64353270679adc73/codec/src/main/java/io/netty/handler/codec/protobuf/ProtobufVarint32FrameDecoder.java#L73
+     */
+    private static int readUnsignedVarintNetty(ByteBuffer buffer) {
+        byte tmp = buffer.get();
+        if (tmp >= 0) {
+            return tmp;
+        } else {
+            int result = tmp & 127;
+            if ((tmp = buffer.get()) >= 0) {
+                result |= tmp << 7;
+            } else {
+                result |= (tmp & 127) << 7;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= tmp << 14;
+                } else {
+                    result |= (tmp & 127) << 14;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= tmp << 21;
+                    } else {
+                        result |= (tmp & 127) << 21;
+                        result |= (tmp = buffer.get()) << 28;
+                        if (tmp < 0) {
+                            throw new IllegalArgumentException();
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
+    /**
+     * Implementation extended from Int implementation from Netty
+     * see: https://github.com/netty/netty/blob/59aa6e635b9996cf21cd946e64353270679adc73/codec/src/main/java/io/netty/handler/codec/protobuf/ProtobufVarint32FrameDecoder.java#L73
+     */
+    private static long readUnsignedVarlongNetty(ByteBuffer buffer) {
+        byte tmp = buffer.get();
+        if (tmp >= 0) {
+            return tmp;
+        } else {
+            long result = tmp & 0x7f;
+            if ((tmp = buffer.get()) >= 0) {
+                result |= tmp << 7;
+            } else {
+                result |= (tmp & 0x7f) << 7;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= tmp << 14;
+                } else {
+                    result |= (tmp & 0x7f) << 14;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= tmp << 21;
+                    } else {
+                        result |= (tmp & 0x7f) << 21;
+                        if ((tmp = buffer.get()) >= 0) {
+                            result |= (long) tmp << 28;
+                        } else {
+                            result |= (long) (tmp & 0x7f) << 28;
+                            if ((tmp = buffer.get()) >= 0) {
+                                result |= (long) tmp << 35;
+                            } else {
+                                result |= (long) (tmp & 0x7f) << 35;
+                                if ((tmp = buffer.get()) >= 0) {
+                                    result |= (long) tmp << 42;
+                                } else {
+                                    result |= (long) (tmp & 0x7f) << 42;
+                                    if ((tmp = buffer.get()) >= 0) {
+                                        result |= (long) tmp << 49;
+                                    } else {
+                                        result |= (long) (tmp & 0x7f) << 49;
+                                        if ((tmp = buffer.get()) >= 0) {
+                                            result |= (long) tmp << 56;
+                                        } else {
+                                            result |= (long) (tmp & 0x7f) << 56;
+                                            result |= (long) (tmp = buffer.get()) << 63;
+                                            if (tmp < 0) {
+                                                throw new IllegalArgumentException();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+    }
+
+    /*
+     * Implementation in Trunk as of Apr 2023 / v3.4
+     */
+    private static void writeUnsignedVarintLegacy(int value, ByteBuffer buffer) {
+        while ((value & 0xffffff80) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
+            buffer.put(b);
+            value >>>= 7;
+        }
+        buffer.put((byte) value);
+    }
+
+    /*
+     * Implementation in Trunk as of Apr 2023 / v3.4
+     */
+    private static void writeUnsignedVarlongLegacy(long v, ByteBuffer buffer) {
+        while ((v & 0xffffffffffffff80L) != 0L) {
+            byte b = (byte) ((v & 0x7f) | 0x80);
+            buffer.put(b);
+            v >>>= 7;
+        }
+        buffer.put((byte) v);
+    }
+
+    /*
+     * Based on an implementation in Netflix's Hollow repository. The only difference is to
+     * extend the implementation of UnsignedLong instead of signed Long present in Hollow.
+     *
+     * see: https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
+     */
+    private static void writeUnsignedVarlongHollow(long value, ByteBuffer buffer) {
+        if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
+        if(value > 0xFFFFFFFFFFFFFFL)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
+        if(value > 0x1FFFFFFFFFFFFL)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
+        if(value > 0x3FFFFFFFFFFL)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
+        if(value > 0x7FFFFFFFFL)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
+        if(value > 0xFFFFFFFL)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
+        if(value > 0x1FFFFFL)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
+        if(value > 0x3FFFL)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
+        if(value > 0x7FL)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
+
+        buffer.put((byte)(value & 0x7FL));
+    }
+
+    /*
+     * Implementation copied from Netflix's Hollow repository.
+     *
+     * see: https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
+     */
+    private static void writeUnsignedVarintHollow(long value, ByteBuffer buffer) {
+        if(value > 0x0FFFFFFF) buffer.put((byte)(0x80 | ((value >>> 28))));
+        if(value > 0x1FFFFF)   buffer.put((byte)(0x80 | ((value >>> 21) & 0x7F)));
+        if(value > 0x3FFF)     buffer.put((byte)(0x80 | ((value >>> 14) & 0x7F)));
+        if(value > 0x7F)       buffer.put((byte)(0x80 | ((value >>>  7) & 0x7F)));
+
+        buffer.put((byte)(value & 0x7F));
+    }
+
+    /*
+     * Implementation extended for Long from the Int implementation at https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
+     * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
+     */
+    private static void writeUnsignedVarlongUnrolled(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+                            buffer.put((byte) (value >>> 28));
+                        } else {
+                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
+                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                                buffer.put((byte) (value >>> 35));
+                            } else {
+                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
+                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                                    buffer.put((byte) (value >>> 42));
+                                } else {
+                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
+                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                                        buffer.put((byte) (value >>> 49));
+                                    } else {
+                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
+                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                                            buffer.put((byte) (value >>> 56));
+                                        } else {
+                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
+                                            buffer.put((byte) (value >>> 63));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * Implementation copied from https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
+     * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
+     */
+    private static void writeUnsignedVarintUnrolled(int value, ByteBuffer buffer) {
+        /*
+         * Implementation notes:
+         * This implementation performs optimizations over traditional loop implementation by unrolling
+         * the loop.
+         */
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        buffer.put((byte) (value >>> 28));
+                    }
+                }
+            }
+        }
     }
 }
