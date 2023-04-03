@@ -40,7 +40,7 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-@OutputTimeUnit(TimeUnit.SECONDS)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
 @Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
@@ -184,18 +184,6 @@ public class ByteUtilsBenchmark {
             // prepare for reading
             state.getTestBuffer().flip();
             bk.consume(ByteUtilsBenchmark.readUnsignedVarlongLegacy(state.getTestBuffer()));
-            state.getTestBuffer().clear();
-        }
-    }
-
-    @Benchmark
-    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedReadVarlongAvro(IterationStateForLong state, Blackhole bk) {
-        for (long randomValue : state.getRandomValues()) {
-            ByteUtils.writeUnsignedVarlong(randomValue, state.getTestBuffer());
-            // prepare for reading
-            state.getTestBuffer().flip();
-            bk.consume(ByteUtilsBenchmark.readUnsignedVarLongAvro(state.getTestBuffer()));
             state.getTestBuffer().clear();
         }
     }
@@ -404,68 +392,6 @@ public class ByteUtilsBenchmark {
             }
             return result;
         }
-    }
-
-    private static long readUnsignedVarLongAvro(ByteBuffer buffer) {
-        int b = buffer.get() & 0xff;
-        int n = b & 0x7f;
-        long l;
-        if (b > 0x7f) {
-            b = buffer.get() & 0xff;
-            n ^= (b & 0x7f) << 7;
-            if (b > 0x7f) {
-                b = buffer.get() & 0xff;
-                n ^= (b & 0x7f) << 14;
-                if (b > 0x7f) {
-                    b = buffer.get() & 0xff;
-                    n ^= (b & 0x7f) << 21;
-                    if (b > 0x7f) {
-                        // only the low 28 bits can be set, so this won't carry
-                        // the sign bit to the long
-                        l = innerLongDecode((long) n, buffer);
-                    } else {
-                        l = n;
-                    }
-                } else {
-                    l = n;
-                }
-            } else {
-                l = n;
-            }
-        } else {
-            l = n;
-        }
-
-        return l;
-    }
-    private static long innerLongDecode(long l, ByteBuffer buffer) {
-        int len = 1;
-        int b = buffer.get() & 0xff;
-        l ^= (b & 0x7fL) << 28;
-        if (b > 0x7f) {
-            b = buffer.get() & 0xff;
-            l ^= (b & 0x7fL) << 35;
-            if (b > 0x7f) {
-                b = buffer.get() & 0xff;
-                l ^= (b & 0x7fL) << 42;
-                if (b > 0x7f) {
-                    b = buffer.get() & 0xff;
-                    l ^= (b & 0x7fL) << 49;
-                    if (b > 0x7f) {
-                        b = buffer.get() & 0xff;
-                        l ^= (b & 0x7fL) << 56;
-                        if (b > 0x7f) {
-                            b = buffer.get() & 0xff;
-                            l ^= (b & 0x7fL) << 63;
-                            if (b > 0x7f) {
-                                throw new IllegalArgumentException("Invalid long encoding");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return l;
     }
 
     /**

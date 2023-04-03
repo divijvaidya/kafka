@@ -269,6 +269,9 @@ public final class ByteUtils {
         return (raw >>> 1) ^ -(raw & 1);
     }
 
+    /**
+     * For implementation details see {@link #readUnsignedVarlong(ByteBuffer)}
+     */
     private static long readUnsignedVarlong(DataInput in) throws IOException {
         byte tmp = in.readByte();
         if (tmp >= 0) {
@@ -287,6 +290,8 @@ public final class ByteUtils {
                         result |= tmp << 21;
                     } else {
                         result |= (tmp & 0x7f) << 21;
+                        // splitting up makes it faster because of the JVM does more
+                        // optimizations on small methods
                         result = innerReadUnsignedVarLong(in, result);
                     }
                 }
@@ -295,7 +300,7 @@ public final class ByteUtils {
         }
     }
 
-    private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
+   private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
         byte tmp;
         if ((tmp = in.readByte()) >= 0) {
             result |= (long) tmp << 28;
@@ -343,7 +348,9 @@ public final class ByteUtils {
         return (raw >>> 1) ^ -(raw & 1);
     }
 
-    @SuppressWarnings("checkstyle:cyclomaticcomplexity")
+    /**
+     * This implementation is an extension of implementation for Int at {@link #readUnsignedVarint(ByteBuffer)}
+     */
     public static long readUnsignedVarlong(ByteBuffer buffer)  {
         byte tmp = buffer.get();
         if (tmp >= 0) {
@@ -362,40 +369,48 @@ public final class ByteUtils {
                         result |= tmp << 21;
                     } else {
                         result |= (tmp & 0x7f) << 21;
-                        if ((tmp = buffer.get()) >= 0) {
-                            result |= (long) tmp << 28;
-                        } else {
-                            result |= (long) (tmp & 0x7f) << 28;
-                            if ((tmp = buffer.get()) >= 0) {
-                                result |= (long) tmp << 35;
-                            } else {
-                                result |= (long) (tmp & 0x7f) << 35;
-                                if ((tmp = buffer.get()) >= 0) {
-                                    result |= (long) tmp << 42;
-                                } else {
-                                    result |= (long) (tmp & 0x7f) << 42;
-                                    if ((tmp = buffer.get()) >= 0) {
-                                        result |= (long) tmp << 49;
-                                    } else {
-                                        result |= (long) (tmp & 0x7f) << 49;
-                                        if ((tmp = buffer.get()) >= 0) {
-                                            result |= (long) tmp << 56;
-                                        } else {
-                                            result |= (long) (tmp & 0x7f) << 56;
-                                            result |= (long) (tmp = buffer.get()) << 63;
-                                            if (tmp < 0) {
-                                                throw illegalVarlongException(result);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // splitting readLong up makes it faster because of the JVM does more
+                        // optimizations on small methods
+                        result = innerUnsignedReadVarLong(buffer, result);
                     }
                 }
             }
             return result;
         }
+    }
+
+    private static long innerUnsignedReadVarLong(ByteBuffer buffer, long result) {
+        byte tmp;
+        if ((tmp = buffer.get()) >= 0) {
+            result |= (long) tmp << 28;
+        } else {
+            result |= (long) (tmp & 0x7f) << 28;
+            if ((tmp = buffer.get()) >= 0) {
+                result |= (long) tmp << 35;
+            } else {
+                result |= (long) (tmp & 0x7f) << 35;
+                if ((tmp = buffer.get()) >= 0) {
+                    result |= (long) tmp << 42;
+                } else {
+                    result |= (long) (tmp & 0x7f) << 42;
+                    if ((tmp = buffer.get()) >= 0) {
+                        result |= (long) tmp << 49;
+                    } else {
+                        result |= (long) (tmp & 0x7f) << 49;
+                        if ((tmp = buffer.get()) >= 0) {
+                            result |= (long) tmp << 56;
+                        } else {
+                            result |= (long) (tmp & 0x7f) << 56;
+                            result |= (long) (tmp = buffer.get()) << 63;
+                            if (tmp < 0) {
+                                throw illegalVarlongException(result);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -422,6 +437,9 @@ public final class ByteUtils {
      * Write the given integer following the variable-length unsigned encoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
      * into the buffer.
+     *
+     * Implementation copied from https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
+     * @see <a href="https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8"> Sample implementation </a>
      *
      * @param value The value to write
      * @param buffer The output to write to
@@ -512,6 +530,8 @@ public final class ByteUtils {
      * Write the given integer following the variable-length zig-zag encoding from
      * <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
      * into the output.
+     * 
+     * For implementation details, see {@link #writeUnsignedVarlong(long, ByteBuffer)}
      *
      * @param v The value to write
      * @param out The output to write to
@@ -545,9 +565,10 @@ public final class ByteUtils {
     }
 
     /**
-     * Based on an implementation in Netflix's Hollow repository. The only difference is to
+     * This implementation is based on Netflix's Hollow repository. The only difference is to
      * extend the implementation of Unsigned Long instead of signed Long present in Hollow.
-     * @see https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
+     *
+     * @see <a href="https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134">Hollow's implementation</a>
      */
     public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
         if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
