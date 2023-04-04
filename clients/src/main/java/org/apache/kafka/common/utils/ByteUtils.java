@@ -541,12 +541,62 @@ public final class ByteUtils {
      */
     public static void writeVarlong(long v, DataOutput out) throws IOException {
         long value = (v << 1) ^ (v >> 63);
-        while ((value & 0xffffffffffffff80L) != 0L) {
-            byte b = (byte) ((value & 0x7f) | 0x80);
-            out.writeByte(b);
-            value >>>= 7;
+        writeUnsignedVarlong(out, value);
+    }
+
+    private static void writeUnsignedVarlong(DataOutput out, long value) throws IOException {
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            out.writeByte((byte) value);
+        } else {
+            out.writeByte((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                out.writeByte((byte) (value >>> 7));
+            } else {
+                out.writeByte((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    out.writeByte((byte) (value >>> 14));
+                } else {
+                    out.writeByte((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        out.writeByte((byte) (value >>> 21));
+                    } else {
+                        out.writeByte((byte) ((value >>> 21) & 0x7F | 0x80));
+                        // splitting up makes it faster because of the JVM does more
+                        // optimizations on small methods
+                        innerWriteUnsignedVarlong(value, out);
+                    }
+                }
+            }
         }
-        out.writeByte((byte) value);
+    }
+
+    private static void innerWriteUnsignedVarlong(long value, DataOutput out) throws IOException {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+            out.writeByte((byte) (value >>> 28));
+        } else {
+            out.writeByte((byte) ((value >>> 28) & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                out.writeByte((byte) (value >>> 35));
+            } else {
+                out.writeByte((byte) ((value >>> 35) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                    out.writeByte((byte) (value >>> 42));
+                } else {
+                    out.writeByte((byte) ((value >>> 42) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                        out.writeByte((byte) (value >>> 49));
+                    } else {
+                        out.writeByte((byte) ((value >>> 49) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                            out.writeByte((byte) (value >>> 56));
+                        } else {
+                            out.writeByte((byte) ((value >>> 56) & 0x7F | 0x80));
+                            out.writeByte((byte) (value >>> 63));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -562,13 +612,63 @@ public final class ByteUtils {
         writeUnsignedVarlong(v, buffer);
     }
 
-    public static void writeUnsignedVarlong(long v, ByteBuffer buffer) {
-        while ((v & 0xffffffffffffff80L) != 0L) {
-            byte b = (byte) ((v & 0x7f) | 0x80);
-            buffer.put(b);
-            v >>>= 7;
+    /*
+     * Implementation extended for Long from the Int implementation at https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
+     * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
+     */
+    public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFF << 7)) == 0) {
+            buffer.put((byte) value);
+        } else {
+            buffer.put((byte) (value & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFF << 14)) == 0) {
+                buffer.put((byte) (value >>> 7));
+            } else {
+                buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFF << 21)) == 0) {
+                    buffer.put((byte) (value >>> 14));
+                } else {
+                    buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFF << 28)) == 0) {
+                        buffer.put((byte) (value >>> 21));
+                    } else {
+                        buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
+                        // splitting up makes it faster because of the JVM does more
+                        // optimizations on small methods
+                        innerWriteUnsignedVarlong(value, buffer);
+                    }
+                }
+            }
         }
-        buffer.put((byte) v);
+    }
+
+    private static void innerWriteUnsignedVarlong(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+            buffer.put((byte) (value >>> 28));
+        } else {
+            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                buffer.put((byte) (value >>> 35));
+            } else {
+                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                    buffer.put((byte) (value >>> 42));
+                } else {
+                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                        buffer.put((byte) (value >>> 49));
+                    } else {
+                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                            buffer.put((byte) (value >>> 56));
+                        } else {
+                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
+                            buffer.put((byte) (value >>> 63));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
