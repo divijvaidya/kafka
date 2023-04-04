@@ -485,31 +485,35 @@ public class ByteUtilsBenchmark {
                         buffer.put((byte) (value >>> 21));
                     } else {
                         buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
-                        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
-                            buffer.put((byte) (value >>> 28));
+                        innerWriteUnsignedVarlongUnrolled(value, buffer);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void innerWriteUnsignedVarlongUnrolled(long value, ByteBuffer buffer) {
+        if ((value & (0xFFFFFFFFFFFFFFFFL << 35)) == 0) {
+            buffer.put((byte) (value >>> 28));
+        } else {
+            buffer.put((byte) ((value >>> 28) & 0x7FL | 0x80));
+            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
+                buffer.put((byte) (value >>> 35));
+            } else {
+                buffer.put((byte) ((value >>> 35) & 0x7FL | 0x80));
+                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
+                    buffer.put((byte) (value >>> 42));
+                } else {
+                    buffer.put((byte) ((value >>> 42) & 0x7FL | 0x80));
+                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
+                        buffer.put((byte) (value >>> 49));
+                    } else {
+                        buffer.put((byte) ((value >>> 49) & 0x7FL | 0x80));
+                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
+                            buffer.put((byte) (value >>> 56));
                         } else {
-                            buffer.put((byte) ((value >>> 28) & 0x7F | 0x80));
-                            if ((value & (0xFFFFFFFFFFFFFFFFL << 42)) == 0) {
-                                buffer.put((byte) (value >>> 35));
-                            } else {
-                                buffer.put((byte) ((value >>> 35) & 0x7F | 0x80));
-                                if ((value & (0xFFFFFFFFFFFFFFFFL << 49)) == 0) {
-                                    buffer.put((byte) (value >>> 42));
-                                } else {
-                                    buffer.put((byte) ((value >>> 42) & 0x7F | 0x80));
-                                    if ((value & (0xFFFFFFFFFFFFFFFFL << 56)) == 0) {
-                                        buffer.put((byte) (value >>> 49));
-                                    } else {
-                                        buffer.put((byte) ((value >>> 49) & 0x7F | 0x80));
-                                        if ((value & (0xFFFFFFFFFFFFFFFFL << 63)) == 0) {
-                                            buffer.put((byte) (value >>> 56));
-                                        } else {
-                                            buffer.put((byte) ((value >>> 56) & 0x7F | 0x80));
-                                            buffer.put((byte) (value >>> 63));
-                                        }
-                                    }
-                                }
-                            }
+                            buffer.put((byte) ((value >>> 56) & 0x7FL | 0x80));
+                            buffer.put((byte) (value >>> 63));
                         }
                     }
                 }
