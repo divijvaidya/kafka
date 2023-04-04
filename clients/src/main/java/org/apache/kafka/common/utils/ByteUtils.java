@@ -295,7 +295,7 @@ public final class ByteUtils {
                         result |= (tmp & 0x7f) << 21;
                         // splitting up makes it faster because of the JVM does more
                         // optimizations on small methods
-                        result = innerReadUnsignedVarLong(in, result);
+                        result = innerReadUnsignedVarlong(in, result);
                     }
                 }
             }
@@ -303,7 +303,7 @@ public final class ByteUtils {
         }
     }
 
-    private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
+    private static long innerReadUnsignedVarlong(DataInput in, long result) throws IOException {
         byte tmp;
         if ((tmp = in.readByte()) >= 0) {
             result |= (long) tmp << 28;
@@ -544,6 +544,9 @@ public final class ByteUtils {
         writeUnsignedVarlong(out, value);
     }
 
+    /**
+     * For implementation details see {@link #writeUnsignedVarlong(long, ByteBuffer)}
+     */
     private static void writeUnsignedVarlong(DataOutput out, long value) throws IOException {
         if ((value & (0xFFFFFFFF << 7)) == 0) {
             out.writeByte((byte) value);
@@ -614,7 +617,7 @@ public final class ByteUtils {
 
     /*
      * Implementation extended for Long from the Int implementation at https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
-     * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
+     * @see <a href="https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8"> Sample implementation </a>
      */
     public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
         if ((value & (0xFFFFFFFF << 7)) == 0) {
