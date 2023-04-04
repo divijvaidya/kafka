@@ -208,15 +208,6 @@ public class ByteUtilsBenchmark {
 
     @Benchmark
     @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarintHollow(IterationStateForInt state) {
-        for (int randomValue : state.getRandomValues()) {
-            ByteUtilsBenchmark.writeUnsignedVarintHollow(randomValue, state.getTestBuffer());
-            state.getTestBuffer().clear();
-        }
-    }
-
-    @Benchmark
-    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
     public void testUnsignedWriteVarlongUnrolled(IterationStateForLong state) {
         for (long randomValue : state.getRandomValues()) {
             ByteUtilsBenchmark.writeUnsignedVarlongUnrolled(randomValue, state.getTestBuffer());
@@ -229,15 +220,6 @@ public class ByteUtilsBenchmark {
     public void testUnsignedWriteVarlongLegacy(IterationStateForLong state) {
         for (long randomValue : state.getRandomValues()) {
             ByteUtilsBenchmark.writeUnsignedVarlongLegacy(randomValue, state.getTestBuffer());
-            state.getTestBuffer().clear();
-        }
-    }
-
-    @Benchmark
-    @CompilerControl(CompilerControl.Mode.DONT_INLINE)
-    public void testUnsignedWriteVarlongHollow(IterationStateForLong state) {
-        for (long randomValue : state.getRandomValues()) {
-            ByteUtilsBenchmark.writeUnsignedVarlongHollow(randomValue, state.getTestBuffer());
             state.getTestBuffer().clear();
         }
     }
@@ -483,40 +465,6 @@ public class ByteUtilsBenchmark {
     }
 
     /*
-     * Based on an implementation in Netflix's Hollow repository. The only difference is to
-     * extend the implementation of UnsignedLong instead of signed Long present in Hollow.
-     *
-     * see: https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
-     */
-    private static void writeUnsignedVarlongHollow(long value, ByteBuffer buffer) {
-        if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
-        if(value > 0xFFFFFFFFFFFFFFL)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
-        if(value > 0x1FFFFFFFFFFFFL)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
-        if(value > 0x3FFFFFFFFFFL)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
-        if(value > 0x7FFFFFFFFL)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
-        if(value > 0xFFFFFFFL)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
-        if(value > 0x1FFFFFL)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
-        if(value > 0x3FFFL)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
-        if(value > 0x7FL)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
-
-        buffer.put((byte)(value & 0x7FL));
-    }
-
-    /*
-     * Implementation copied from Netflix's Hollow repository.
-     *
-     * see: https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134
-     */
-    private static void writeUnsignedVarintHollow(long value, ByteBuffer buffer) {
-        if(value > 0x0FFFFFFF) buffer.put((byte)(0x80 | ((value >>> 28))));
-        if(value > 0x1FFFFF)   buffer.put((byte)(0x80 | ((value >>> 21) & 0x7F)));
-        if(value > 0x3FFF)     buffer.put((byte)(0x80 | ((value >>> 14) & 0x7F)));
-        if(value > 0x7F)       buffer.put((byte)(0x80 | ((value >>>  7) & 0x7F)));
-
-        buffer.put((byte)(value & 0x7F));
-    }
-
-    /*
      * Implementation extended for Long from the Int implementation at https://github.com/astei/varint-writing-showdown/tree/dev (MIT License)
      * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
      */
@@ -574,11 +522,6 @@ public class ByteUtilsBenchmark {
      * see: https://github.com/astei/varint-writing-showdown/blob/6b1a4baec4b1f0ce65fa40cf0b282ec775fdf43e/src/jmh/java/me/steinborn/varintshowdown/res/SmartNoDataDependencyUnrolledVarIntWriter.java#L8
      */
     private static void writeUnsignedVarintUnrolled(int value, ByteBuffer buffer) {
-        /*
-         * Implementation notes:
-         * This implementation performs optimizations over traditional loop implementation by unrolling
-         * the loop.
-         */
         if ((value & (0xFFFFFFFF << 7)) == 0) {
             buffer.put((byte) value);
         } else {

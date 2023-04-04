@@ -26,6 +26,9 @@ import java.nio.ByteBuffer;
 
 /**
  * This classes exposes low-level methods for reading/writing from byte streams or buffers.
+ *
+ * The implementation of these methods has been tuned for JVM and the empirical calculations could be found
+ * using ByteUtilsBenchmark.java
  */
 public final class ByteUtils {
 
@@ -300,7 +303,7 @@ public final class ByteUtils {
         }
     }
 
-   private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
+    private static long innerReadUnsignedVarLong(DataInput in, long result) throws IOException {
         byte tmp;
         if ((tmp = in.readByte()) >= 0) {
             result |= (long) tmp << 28;
@@ -450,18 +453,18 @@ public final class ByteUtils {
         } else {
             buffer.put((byte) (value & 0x7F | 0x80));
             if ((value & (0xFFFFFFFF << 14)) == 0) {
-                buffer.put((byte) (value >>> 7));
+                buffer.put((byte) ((value >>> 7) & 0xFF));
             } else {
                 buffer.put((byte) ((value >>> 7) & 0x7F | 0x80));
                 if ((value & (0xFFFFFFFF << 21)) == 0) {
-                    buffer.put((byte) (value >>> 14));
+                    buffer.put((byte) ((value >>> 14) & 0xFF));
                 } else {
                     buffer.put((byte) ((value >>> 14) & 0x7F | 0x80));
                     if ((value & (0xFFFFFFFF << 28)) == 0) {
-                        buffer.put((byte) (value >>> 21));
+                        buffer.put((byte) ((value >>> 21) & 0xFF));
                     } else {
                         buffer.put((byte) ((value >>> 21) & 0x7F | 0x80));
-                        buffer.put((byte) (value >>> 28));
+                        buffer.put((byte) ((value >>> 28) & 0xFF));
                     }
                 }
             }
@@ -538,17 +541,12 @@ public final class ByteUtils {
      */
     public static void writeVarlong(long v, DataOutput out) throws IOException {
         long value = (v << 1) ^ (v >> 63);
-        if(value > 0x7FFFFFFFFFFFFFFFL) out.writeByte((byte)(0x80 | (value >>> 63)));
-        if(value > 0xFFFFFFFFFFFFFFL)   out.writeByte((byte)(0x80 | ((value >>> 56) & 0x7FL)));
-        if(value > 0x1FFFFFFFFFFFFL)    out.writeByte((byte)(0x80 | ((value >>> 49) & 0x7FL)));
-        if(value > 0x3FFFFFFFFFFL)      out.writeByte((byte)(0x80 | ((value >>> 42) & 0x7FL)));
-        if(value > 0x7FFFFFFFFL)        out.writeByte((byte)(0x80 | ((value >>> 35) & 0x7FL)));
-        if(value > 0xFFFFFFFL)          out.writeByte((byte)(0x80 | ((value >>> 28) & 0x7FL)));
-        if(value > 0x1FFFFFL)           out.writeByte((byte)(0x80 | ((value >>> 21) & 0x7FL)));
-        if(value > 0x3FFFL)             out.writeByte((byte)(0x80 | ((value >>> 14) & 0x7FL)));
-        if(value > 0x7FL)               out.writeByte((byte)(0x80 | ((value >>>  7) & 0x7FL)));
-
-        out.writeByte((byte)(value & 0x7FL));
+        while ((value & 0xffffffffffffff80L) != 0L) {
+            byte b = (byte) ((value & 0x7f) | 0x80);
+            out.writeByte(b);
+            value >>>= 7;
+        }
+        out.writeByte((byte) value);
     }
 
     /**
@@ -564,24 +562,13 @@ public final class ByteUtils {
         writeUnsignedVarlong(v, buffer);
     }
 
-    /**
-     * This implementation is based on Netflix's Hollow repository. The only difference is to
-     * extend the implementation of Unsigned Long instead of signed Long present in Hollow.
-     *
-     * @see <a href="https://github.com/Netflix/hollow/blame/877dd522431ac11808d81d95197d5fd0916bc7b5/hollow/src/main/java/com/netflix/hollow/core/memory/encoding/VarInt.java#L51-L134">Hollow's implementation</a>
-     */
-    public static void writeUnsignedVarlong(long value, ByteBuffer buffer) {
-        if(value > 0x7FFFFFFFFFFFFFFFL) buffer.put((byte)(0x80 | (value >>> 63)));
-        if(value > 0xFFFFFFFFFFFFFFL)   buffer.put((byte)(0x80 | ((value >>> 56) & 0x7FL)));
-        if(value > 0x1FFFFFFFFFFFFL)    buffer.put((byte)(0x80 | ((value >>> 49) & 0x7FL)));
-        if(value > 0x3FFFFFFFFFFL)      buffer.put((byte)(0x80 | ((value >>> 42) & 0x7FL)));
-        if(value > 0x7FFFFFFFFL)        buffer.put((byte)(0x80 | ((value >>> 35) & 0x7FL)));
-        if(value > 0xFFFFFFFL)          buffer.put((byte)(0x80 | ((value >>> 28) & 0x7FL)));
-        if(value > 0x1FFFFFL)           buffer.put((byte)(0x80 | ((value >>> 21) & 0x7FL)));
-        if(value > 0x3FFFL)             buffer.put((byte)(0x80 | ((value >>> 14) & 0x7FL)));
-        if(value > 0x7FL)               buffer.put((byte)(0x80 | ((value >>>  7) & 0x7FL)));
-
-        buffer.put((byte)(value & 0x7FL));
+    public static void writeUnsignedVarlong(long v, ByteBuffer buffer) {
+        while ((v & 0xffffffffffffff80L) != 0L) {
+            byte b = (byte) ((v & 0x7f) | 0x80);
+            buffer.put(b);
+            v >>>= 7;
+        }
+        buffer.put((byte) v);
     }
 
     /**
