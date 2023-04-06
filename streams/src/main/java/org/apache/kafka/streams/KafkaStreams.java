@@ -39,6 +39,7 @@ import org.apache.kafka.common.metrics.Sensor.RecordingLevel;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.errors.InvalidStateStoreException;
 import org.apache.kafka.streams.errors.InvalidStateStorePartitionException;
 import org.apache.kafka.streams.errors.ProcessorStateException;
@@ -162,7 +163,6 @@ public class KafkaStreams implements AutoCloseable {
     private final Metrics metrics;
     protected final StreamsConfig applicationConfigs;
     protected final List<StreamThread> threads;
-    protected final StateDirectory stateDirectory;
     protected final StreamsMetadataState streamsMetadataState;
     private final ScheduledExecutorService stateDirCleaner;
     private final ScheduledExecutorService rocksDBMetricsRecordingService;
@@ -178,6 +178,7 @@ public class KafkaStreams implements AutoCloseable {
     private final QueryableStoreProvider queryableStoreProvider;
 
     GlobalStreamThread globalStreamThread;
+    protected StateDirectory stateDirectory = null;
     private KafkaStreams.StateListener stateListener;
     private StateRestoreListener globalStateRestoreListener;
     private boolean oldHandler;
@@ -881,6 +882,7 @@ public class KafkaStreams implements AutoCloseable {
             stateDirectory = new StateDirectory(applicationConfigs, time, topologyMetadata.hasPersistentStores(), topologyMetadata.hasNamedTopologies());
             processId = stateDirectory.initializeProcessId();
         } catch (final ProcessorStateException fatal) {
+            Utils.closeQuietly(stateDirectory, "streams state directory");
             throw new StreamsException(fatal);
         }
 

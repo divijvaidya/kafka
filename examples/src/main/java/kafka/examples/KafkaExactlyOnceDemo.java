@@ -131,51 +131,52 @@ public class KafkaExactlyOnceDemo {
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
             KafkaProperties.KAFKA_SERVER_URL + ":" + KafkaProperties.KAFKA_SERVER_PORT);
 
-        Admin adminClient = Admin.create(props);
+        try (final Admin adminClient = Admin.create(props)) {
 
-        List<String> topicsToDelete = Arrays.asList(INPUT_TOPIC, OUTPUT_TOPIC);
+            List<String> topicsToDelete = Arrays.asList(INPUT_TOPIC, OUTPUT_TOPIC);
 
-        deleteTopic(adminClient, topicsToDelete);
+            deleteTopic(adminClient, topicsToDelete);
 
-        // Check topic existence in a retry loop
-        while (true) {
-            System.out.println("Making sure the topics are deleted successfully: " + topicsToDelete);
+            // Check topic existence in a retry loop
+            while (true) {
+                System.out.println("Making sure the topics are deleted successfully: " + topicsToDelete);
 
-            Set<String> listedTopics = adminClient.listTopics().names().get();
-            System.out.println("Current list of topics: " + listedTopics);
+                Set<String> listedTopics = adminClient.listTopics().names().get();
+                System.out.println("Current list of topics: " + listedTopics);
 
-            boolean hasTopicInfo = false;
-            for (String listedTopic : listedTopics) {
-                if (topicsToDelete.contains(listedTopic)) {
-                    hasTopicInfo = true;
+                boolean hasTopicInfo = false;
+                for (String listedTopic : listedTopics) {
+                    if (topicsToDelete.contains(listedTopic)) {
+                        hasTopicInfo = true;
+                        break;
+                    }
+                }
+                if (!hasTopicInfo) {
                     break;
                 }
-            }
-            if (!hasTopicInfo) {
-                break;
-            }
-            Thread.sleep(1000);
-        }
-
-        // Create topics in a retry loop
-        while (true) {
-            final short replicationFactor = 1;
-            final List<NewTopic> newTopics = Arrays.asList(
-                new NewTopic(INPUT_TOPIC, numPartitions, replicationFactor),
-                new NewTopic(OUTPUT_TOPIC, numPartitions, replicationFactor));
-            try {
-                adminClient.createTopics(newTopics).all().get();
-                System.out.println("Created new topics: " + newTopics);
-                break;
-            } catch (ExecutionException e) {
-                if (!(e.getCause() instanceof TopicExistsException)) {
-                    throw e;
-                }
-                System.out.println("Metadata of the old topics are not cleared yet...");
-
-                deleteTopic(adminClient, topicsToDelete);
-
                 Thread.sleep(1000);
+            }
+
+            // Create topics in a retry loop
+            while (true) {
+                final short replicationFactor = 1;
+                final List<NewTopic> newTopics = Arrays.asList(
+                        new NewTopic(INPUT_TOPIC, numPartitions, replicationFactor),
+                        new NewTopic(OUTPUT_TOPIC, numPartitions, replicationFactor));
+                try {
+                    adminClient.createTopics(newTopics).all().get();
+                    System.out.println("Created new topics: " + newTopics);
+                    break;
+                } catch (ExecutionException e) {
+                    if (!(e.getCause() instanceof TopicExistsException)) {
+                        throw e;
+                    }
+                    System.out.println("Metadata of the old topics are not cleared yet...");
+
+                    deleteTopic(adminClient, topicsToDelete);
+
+                    Thread.sleep(1000);
+                }
             }
         }
     }

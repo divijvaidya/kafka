@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * A demo class for how to write a customized EOS app. It takes a consume-process-produce loop.
  * Important configurations and APIs are commented.
  */
-public class ExactlyOnceMessageProcessor extends Thread {
+public class ExactlyOnceMessageProcessor extends Thread implements AutoCloseable {
 
     private static final boolean READ_COMMITTED = true;
 
@@ -183,5 +183,16 @@ public class ExactlyOnceMessageProcessor extends Thread {
             else
                 consumer.seekToBeginning(Collections.singleton(tp));
         });
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (producer != null) {
+            producer.close();
+        }
+
+        if (consumer != null) {
+            consumer.close();
+        }
     }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.kafka.jmh.admin;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,6 +56,7 @@ import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
 
 @State(Scope.Benchmark)
@@ -122,6 +124,12 @@ public class GetListOffsetsCallsBenchmark {
 
         AdminClientUnitTestEnv adminEnv = new AdminClientUnitTestEnv(mockCluster());
         admin = (KafkaAdminClient) adminEnv.adminClient();
+    }
+
+    @TearDown(Level.Trial)
+    public void cleanup() {
+        if (admin != null)
+            admin.close(Duration.ofMinutes(1));
     }
 
     @Benchmark
