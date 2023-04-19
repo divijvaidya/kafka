@@ -101,12 +101,14 @@ public class MirrorMaker {
 
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 60L;
 
-    private static final List<Class<?>> CONNECTOR_CLASSES = Arrays.asList(
+    // visible for testing
+    static final List<Class<?>> CONNECTOR_CLASSES = Arrays.asList(
         MirrorSourceConnector.class,
         MirrorHeartbeatConnector.class,
         MirrorCheckpointConnector.class);
- 
-    private final Map<SourceAndTarget, Herder> herders = new HashMap<>();
+
+    // visible for testing
+    final Map<SourceAndTarget, Herder> herders = new HashMap<>();
     private CountDownLatch startLatch;
     private CountDownLatch stopLatch;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
