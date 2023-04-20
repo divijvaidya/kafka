@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.kafka.connect.mirror;
+package org.apache.kafka.connect.mirror.integration;
 
 import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.connect.runtime.Herder;
-import org.apache.kafka.connect.runtime.rest.entities.ConfigInfos;
-import org.apache.kafka.connect.util.FutureCallback;
+import org.apache.kafka.connect.mirror.MirrorMaker;
 import org.apache.kafka.connect.util.clusters.EmbeddedKafkaCluster;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,16 +36,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG;
-import static org.apache.kafka.connect.mirror.MirrorMaker.CONNECTOR_CLASSES;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @Tag("integration")
 public class DedicatedMirrorIntegrationTest {
@@ -55,7 +49,6 @@ public class DedicatedMirrorIntegrationTest {
 
     private static final int TOPIC_CREATION_TIMEOUT_MS = 30_000;
     private static final int TOPIC_REPLICATION_TIMEOUT_MS = 30_000;
-    private static final int MM_STARTUP_TIMEOUT_MS = 10_000;
 
     private Map<String, EmbeddedKafkaCluster> kafkaClusters;
     private Map<String, MirrorMaker> mirrorMakers;
@@ -64,16 +57,13 @@ public class DedicatedMirrorIntegrationTest {
     public void setup() {
         kafkaClusters = new HashMap<>();
         mirrorMakers = new HashMap<>();
-
     }
 
     @AfterEach
     public void teardown() throws Throwable {
         AtomicReference<Throwable> shutdownFailure = new AtomicReference<>();
-        mirrorMakers.forEach((name, mirrorMaker) -> {
-                Utils.closeQuietly(mirrorMaker::stop, "MirrorMaker worker '" + name + "'", shutdownFailure);
-                mirrorMaker.awaitStop();
-            }
+        mirrorMakers.forEach((name, mirrorMaker) ->
+            Utils.closeQuietly(mirrorMaker::stop, "MirrorMaker worker '" + name + "'", shutdownFailure)
         );
         kafkaClusters.forEach((name, kafkaCluster) ->
             Utils.closeQuietly(kafkaCluster::stop, "Embedded Kafka cluster '" + name + "'", shutdownFailure)
@@ -95,7 +85,7 @@ public class DedicatedMirrorIntegrationTest {
         return result;
     }
 
-    private MirrorMaker startMirrorMaker(String name, Map<String, String> mmProps) throws ExecutionException, InterruptedException, TimeoutException {
+    private MirrorMaker startMirrorMaker(String name, Map<String, String> mmProps) {
         if (mirrorMakers.containsKey(name))
             throw new IllegalStateException("Cannot register multiple MirrorMaker nodes with the same name");
 
@@ -103,8 +93,6 @@ public class DedicatedMirrorIntegrationTest {
         mirrorMakers.put(name, result);
 
         result.start();
-
-        waitForMirrorMakerConnectorStartUp(mmProps, result);
 
         return result;
     }
@@ -121,7 +109,8 @@ public class DedicatedMirrorIntegrationTest {
         clusterA.start();
         clusterB.start();
 
-        try (Admin adminB = clusterB.createAdminClient()) {
+        try (Admin adminA = clusterA.createAdminClient();
+             Admin adminB = clusterB.createAdminClient()) {
 
             // Cluster aliases
             final String a = "A";
@@ -159,7 +148,7 @@ public class DedicatedMirrorIntegrationTest {
             String topic = testTopicPrefix + "1";
 
             // Create the topic on cluster A
-            clusterA.createTopic(topic, 1);
+            createTopic(adminA, topic);
             // and wait for MirrorMaker to create it on cluster B
             awaitTopicCreation(b, adminB, a + "." + topic);
 
@@ -167,23 +156,6 @@ public class DedicatedMirrorIntegrationTest {
             writeToTopic(clusterA, topic, numMessages);
             // and wait for MirrorMaker to copy it to cluster B
             awaitTopicContent(clusterB, b, a + "." + topic, numMessages);
-        }
-    }
-
-    private void waitForMirrorMakerConnectorStartUp(Map<String, String> mmProps, MirrorMaker mm) throws InterruptedException, ExecutionException, TimeoutException {
-        final MirrorMakerConfig mmConfig = new MirrorMakerConfig(mmProps);
-        assertEquals(1, mm.herders.size(), "Only a single herder is expected for the tests");
-        // we need to pick up the first herder only because
-        Map.Entry<SourceAndTarget, Herder> es = mm.herders.entrySet().stream().iterator().next();
-        final Herder herder = es.getValue();
-        final SourceAndTarget srcTar = es.getKey();
-
-        for (Class<?> clazz : CONNECTOR_CLASSES) {
-            FutureCallback<ConfigInfos> validationCallback = new FutureCallback<>();
-            Map<String, String> connectorProps = mmConfig.connectorBaseConfig(srcTar, clazz);
-            // the validated configs don't need to be logged
-            herder.validateConnectorConfig(connectorProps, validationCallback, false);
-            validationCallback.get(MM_STARTUP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -204,7 +176,9 @@ public class DedicatedMirrorIntegrationTest {
         clusterA.start();
         clusterB.start();
 
-        try (Admin adminB = clusterB.createAdminClient()) {
+        try (Admin adminA = clusterA.createAdminClient();
+                Admin adminB = clusterB.createAdminClient()) {
+
             // Cluster aliases
             final String a = "A";
             // Use a convoluted cluster name to ensure URL encoding/decoding works
@@ -251,7 +225,7 @@ public class DedicatedMirrorIntegrationTest {
             // Bring up a three-node cluster
             final int numNodes = 3;
             for (int i = 0; i < numNodes; i++) {
-                final MirrorMaker mm = startMirrorMaker("node " + i, mmProps);
+                startMirrorMaker("node " + i, mmProps);
             }
 
             // Create one topic per Kafka cluster per MirrorMaker node
@@ -261,7 +235,7 @@ public class DedicatedMirrorIntegrationTest {
                 String topic = testTopicPrefix + i;
 
                 // Create the topic on cluster A
-                clusterA.createTopic(topic, 1);
+                createTopic(adminA, topic);
                 // and wait for MirrorMaker to create it on cluster B
                 awaitTopicCreation(b, adminB, a + "." + topic);
 
@@ -271,6 +245,10 @@ public class DedicatedMirrorIntegrationTest {
                 awaitTopicContent(clusterB, b, a + "." + topic, messagesPerTopic);
             }
         }
+    }
+
+    private void createTopic(Admin admin, String name) throws Exception {
+        admin.createTopics(Collections.singleton(new NewTopic(name, 1, (short) 1))).all().get();
     }
 
     private void awaitTopicCreation(String clusterName, Admin admin, String topic) throws Exception {

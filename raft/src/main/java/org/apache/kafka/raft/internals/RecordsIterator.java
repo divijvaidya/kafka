@@ -240,7 +240,7 @@ public final class RecordsIterator<T> implements Iterator<Batch<T>>, AutoCloseab
                 );
             }
         } finally {
-            Utils.closeQuietly(input, "DataInputStream");
+            Utils.closeQuietly(input, "BytesStream for input containing records");
         }
 
         return result;

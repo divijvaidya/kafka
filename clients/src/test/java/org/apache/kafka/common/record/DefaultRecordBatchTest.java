@@ -23,8 +23,8 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.BytesStream;
+import org.apache.kafka.common.utils.ChunkedBytesStream;
 import org.apache.kafka.common.utils.CloseableIterator;
-import org.apache.kafka.common.utils.SkippableChunkedBytesStream;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.test.TestUtils;
 import org.junit.jupiter.api.Test;
@@ -555,7 +555,7 @@ public class DefaultRecordBatchTest {
 
         try (final BufferSupplier bufferSupplier = BufferSupplier.create();
              final InputStream zstdStream = spy(ZstdFactory.wrapForInput(recordsBuffer, batch.magic(), bufferSupplier));
-             final BytesStream chunkedStream = new SkippableChunkedBytesStream(zstdStream, bufferSupplier, 16 * 1024)) {
+             final BytesStream chunkedStream = new ChunkedBytesStream(zstdStream, bufferSupplier, 16 * 1024, false)) {
 
             when(mockCompression.wrapForInput(any(ByteBuffer.class), anyByte(), any(BufferSupplier.class))).thenReturn(chunkedStream);
 

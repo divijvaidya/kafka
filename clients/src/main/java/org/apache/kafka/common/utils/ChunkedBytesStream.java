@@ -29,7 +29,9 @@ import java.nio.ByteBuffer;
  * <p>
  * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
  * differences:
- * - Unlike {@link java.io.BufferedInputStream#skip(long)}
+ * - Unlike {@link java.io.BufferedInputStream#skip(long)} this class could be configured to not push skip() to
+ * sourceStream. We may want to avoid pushing this to sourceStream because it's implementation maybe inefficient,
+ * e.g. the case of ZstdInputStream which allocates a new buffer from buffer pool, per skip call.
  * - Unlike {@link java.io.BufferedInputStream}, which allocates an intermediate buffer, this uses a buffer supplier to
  * create the intermediate buffer.
  * - Unlike {@link DataInputStream#readByte()}, the readByte method does not push the reading of a byte to sourceStream.
@@ -53,19 +55,25 @@ public class ChunkedBytesStream implements BytesStream {
      * this buffer is null.
      */
     private byte[] intermediateBuf;
-    protected int limit;
     /**
-     *
+     * Total number of bytes written to {@link #intermediateBuf}
      */
-    protected int pos;
+    protected int limit = 0;
+    /**
+     * Index for the next byte read in {@link #intermediateBuf}
+     */
+    protected int pos = 0;
     /**
      * Reference for the intermediate buffer. This reference is only kept for releasing the buffer from the
      * buffer supplier.
      */
     private final ByteBuffer intermediateBufRef;
+    /**
+     * Determines if the skip be pushed down
+     */
+    private final boolean pushSkipToSourceStream;
 
-
-    public ChunkedBytesStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize) {
+    public ChunkedBytesStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize, boolean pushSkipToSourceStream) {
         this.bufferSupplier = bufferSupplier;
         this.sourceStream = sourceStream;
         intermediateBufRef = bufferSupplier.get(intermediateBufSize);
@@ -73,6 +81,7 @@ public class ChunkedBytesStream implements BytesStream {
             throw new IllegalArgumentException("provided ByteBuffer lacks array or has non-zero arrayOffset");
         }
         intermediateBuf = intermediateBufRef.array();
+        this.pushSkipToSourceStream = pushSkipToSourceStream;
     }
 
     private byte[] getBufIfOpen() throws IOException {
@@ -85,7 +94,7 @@ public class ChunkedBytesStream implements BytesStream {
     @Override
     public int read() throws IOException {
         if (pos >= limit) {
-            fill();
+            readChunk();
             if (pos >= limit)
                 return -1;
         }
@@ -104,7 +113,7 @@ public class ChunkedBytesStream implements BytesStream {
      * Fills the intermediate buffer with more data. The amount of new data read is equal to the remaining empty space
      * in the buffer. For optimal performance, read as much data as possible in this call.
      */
-    int fill() throws IOException {
+    int readChunk() throws IOException {
         byte[] buffer = getBufIfOpen();
 
         // switch to writing mode
@@ -152,7 +161,7 @@ public class ChunkedBytesStream implements BytesStream {
                     if (bytesRead < 0)
                         break;
                 } else {
-                    fill();
+                    readChunk();
                     if (pos >= limit)
                         break;
                 }
@@ -173,31 +182,51 @@ public class ChunkedBytesStream implements BytesStream {
         return totalRead;
     }
 
+    /**
+     * This implementation of skip reads the data from sourceStream in chunks, copies the data into intermediate buffer
+     * and skips it.
+     */
     @Override
     public int skipBytes(int toSkip) throws IOException {
         if (toSkip <= 0) {
             return 0;
         }
-        int totalSkipped = 0;
 
-        // Skip what exists in the intermediate buffer first
+        int remaining = toSkip;
+
+        // Skip bytes stored in intermediate buffer first
         int avail = limit - pos;
-        int bytesToRead = (avail < (toSkip - totalSkipped)) ? avail : (toSkip - totalSkipped);
-        pos += bytesToRead;
-        totalSkipped += bytesToRead;
+        int chunkSkipped = (avail < remaining) ? avail : remaining;
+        pos += chunkSkipped;
+        remaining -= chunkSkipped;
 
-        // Use sourceStream's skip() to skip the rest
-        while ((totalSkipped < toSkip) && ((bytesToRead = (int) getInIfOpen().skip(toSkip - totalSkipped)) > 0)) {
-            totalSkipped += bytesToRead;
+        while (remaining > 0) {
+            if (pushSkipToSourceStream) {
+                // Use sourceStream's skip() to skip the rest.
+                // conversion to int is acceptable because toSkip and remaining are int.
+                chunkSkipped = (int) getInIfOpen().skip(remaining);
+                if (chunkSkipped <= 0)
+                    break;
+            } else {
+                if (pos >= limit) {
+                    readChunk();
+                    // if we don't have data in intermediate buffer after fill, then stop skipping
+                    if (pos >= limit)
+                        break;
+                }
+                avail = limit - pos;
+                chunkSkipped = (avail < remaining) ? avail : remaining;
+                pos += chunkSkipped;
+            }
+            remaining -= chunkSkipped;
         }
-
-        return totalSkipped;
+        return toSkip - remaining;
     }
 
     @Override
     public byte readByte() throws IOException {
         if (pos >= limit) {
-            fill();
+            readChunk();
             if (pos >= limit)
                 throw new EOFException();
         }

@@ -20,19 +20,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.stream.Stream;
 
@@ -41,20 +42,20 @@ public class ChunkedBytesStreamTest {
     private final BufferSupplier supplier = BufferSupplier.NO_CACHING;
 
     @Test
-    public void readFully_testEofError() throws IOException {
+    public void testEofErrorForMethodReadFully() throws IOException {
         ByteBuffer input = ByteBuffer.allocate(8);
         int lengthGreaterThanInput = input.capacity() + 1;
         byte[] got = new byte[lengthGreaterThanInput];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             assertEquals(-1, is.read(got, 0, got.length), "Should return -1 signifying end of input");
         }
     }
 
     @ParameterizedTest
     @MethodSource("provideSourceBytebuffersForTest")
-    public void readFully_testCorrectness(ByteBuffer input) throws IOException {
+    public void testCorrectnessForMethodReadFully(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             // perform a 2 pass read. this tests the scenarios where one pass may lead to partially consumed
             // intermediate buffer
             int toRead = RANDOM.nextInt(got.length);
@@ -66,9 +67,9 @@ public class ChunkedBytesStreamTest {
 
     @ParameterizedTest
     @MethodSource("provideSourceBytebuffersForTest")
-    public void readByte_testCorrectness(ByteBuffer input) throws IOException {
+    public void testCorrectnessForMethodReadByte(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             int i = 0;
             while (i < got.length) {
                 got[i++] = is.readByte();
@@ -78,10 +79,10 @@ public class ChunkedBytesStreamTest {
     }
 
     @Test
-    public void readByte_testEofError() throws IOException {
+    public void testEofErrorForMethodReadByte() throws IOException {
         ByteBuffer input = ByteBuffer.allocate(8);
         int lengthGreaterThanInput = input.capacity() + 1;
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             assertThrows(EOFException.class, () -> {
                 int i = 0;
                 while (i++ < lengthGreaterThanInput) {
@@ -93,14 +94,14 @@ public class ChunkedBytesStreamTest {
 
     @ParameterizedTest
     @MethodSource("provideSourceBytebuffersForTest")
-    public void read_testCorrectness(ByteBuffer inputBuf) throws IOException {
+    public void testCorrectnessForMethodRead(ByteBuffer inputBuf) throws IOException {
         int[] inputArr = new int[inputBuf.capacity()];
         for (int i = 0; i < inputArr.length; i++) {
             inputArr[i] = Byte.toUnsignedInt(inputBuf.get());
         }
         int[] got = new int[inputArr.length];
         inputBuf.rewind();
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
             int i = 0;
             while (i < got.length) {
                 got[i++] = is.read();
@@ -110,11 +111,11 @@ public class ChunkedBytesStreamTest {
     }
 
     @Test
-    public void read_testEndOfFile() throws IOException {
+    public void testEndOfFileForMethodRead() throws IOException {
         ByteBuffer inputBuf = ByteBuffer.allocate(2);
         int lengthGreaterThanInput = inputBuf.capacity() + 1;
 
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
             int cnt = 0;
             while (cnt++ < lengthGreaterThanInput) {
                 int res = is.read();
@@ -125,44 +126,86 @@ public class ChunkedBytesStreamTest {
     }
 
     @ParameterizedTest
-    @MethodSource("provideSourceSkipValuesForTest")
-    public void skip_testCorrectness(int numBytesToSkip, int expectedSkipCalls) throws IOException {
+    @ValueSource(booleans = {true, false})
+    public void testEndOfSourceForMethodSkip(boolean pushSkipToSourceStream) throws IOException {
         ByteBuffer inputBuf = ByteBuffer.allocate(16);
         RANDOM.nextBytes(inputBuf.array());
         inputBuf.rewind();
 
         final InputStream sourcestream = spy(new ByteBufferInputStream(inputBuf));
-        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10)) {
-            // fill up intermediate buffer
-            is.read(); // now we should have 10 - 1 = 9 bytes in intermediate buffer
-
-            // skip bytes and observe the calls to source stream's skip() method
-            int res = is.skipBytes(numBytesToSkip);
-            assertEquals(numBytesToSkip, res);
-            verify(sourcestream, times(expectedSkipCalls)).skip(anyLong());
-        }
-    }
-
-    @Test
-    public void skip_testEndOfSource() throws IOException {
-        ByteBuffer inputBuf = ByteBuffer.allocate(16);
-        RANDOM.nextBytes(inputBuf.array());
-        inputBuf.rewind();
-
-        final InputStream sourcestream = spy(new ByteBufferInputStream(inputBuf));
-        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10)) {
+        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10, pushSkipToSourceStream)) {
             int res = is.skipBytes(inputBuf.capacity() + 1);
             assertEquals(inputBuf.capacity(), res);
         }
     }
 
-    private static Stream<Arguments> provideSourceSkipValuesForTest() {
-        return Stream.of(
-            // skip available in intermediate buffer
-            Arguments.of(9, 0),
-            // skip not available in intermediate buffer
-            Arguments.of(10, 1)
+    @ParameterizedTest
+    @MethodSource({"provideSourceSkipValuesForTest"})
+    public void testCorrectnessForMethodSkip(int bytesToPreRead, ByteBuffer inputBuf, int numBytesToSkip, boolean pushSkipToSourceStream) throws IOException {
+        int expectedInpLeftAfterSkip = inputBuf.remaining() - bytesToPreRead - numBytesToSkip;
+        int expectedSkippedBytes = Math.min(inputBuf.remaining() - bytesToPreRead, numBytesToSkip);
+
+        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10, pushSkipToSourceStream)) {
+            int cnt = 0;
+            while (cnt++ < bytesToPreRead) {
+                is.readByte();
+            }
+
+            int res = is.skipBytes(numBytesToSkip);
+            assertEquals(expectedSkippedBytes, res);
+
+            // verify that we are able to read rest of the input
+            cnt = 0;
+            while (cnt++ < expectedInpLeftAfterSkip) {
+                is.readByte();
+            }
+        }
+    }
+
+    private static List<Arguments> provideSourceSkipValuesForTest() {
+        ByteBuffer bufGreaterThanIntermediateBuf = ByteBuffer.allocate(16);
+        RANDOM.nextBytes(bufGreaterThanIntermediateBuf.array());
+        bufGreaterThanIntermediateBuf.position(bufGreaterThanIntermediateBuf.capacity());
+        bufGreaterThanIntermediateBuf.flip();
+
+        ByteBuffer bufMuchGreaterThanIntermediateBuf = ByteBuffer.allocate(100);
+        RANDOM.nextBytes(bufMuchGreaterThanIntermediateBuf.array());
+        bufMuchGreaterThanIntermediateBuf.position(bufMuchGreaterThanIntermediateBuf.capacity());
+        bufMuchGreaterThanIntermediateBuf.flip();
+
+        ByteBuffer emptyBuffer = ByteBuffer.allocate(2);
+
+        ByteBuffer oneByteBuf = ByteBuffer.allocate(1).put((byte) 1);
+        oneByteBuf.flip();
+
+        List<List<Object>> testInputs = Arrays.asList(
+            // empty source byte array
+            Arrays.asList(0, emptyBuffer, 0),
+            Arrays.asList(0, emptyBuffer, 1),
+            Arrays.asList(1, emptyBuffer, 1),
+            Arrays.asList(1, emptyBuffer, 0),
+            // byte source array with 1 byte
+            Arrays.asList(0, oneByteBuf, 0),
+            Arrays.asList(0, oneByteBuf, 1),
+            Arrays.asList(1, oneByteBuf, 0),
+            Arrays.asList(1, oneByteBuf, 1),
+            // byte source array with full read from intermediate buf
+            Arrays.asList(0, bufGreaterThanIntermediateBuf.duplicate(), bufGreaterThanIntermediateBuf.capacity()),
+            Arrays.asList(bufGreaterThanIntermediateBuf.capacity(), bufGreaterThanIntermediateBuf.duplicate(), 0),
+            Arrays.asList(2, bufGreaterThanIntermediateBuf.duplicate(), 10),
+            Arrays.asList(2, bufGreaterThanIntermediateBuf.duplicate(), 8)
         );
+
+        Boolean[] tailArgs = new Boolean[]{true, false};
+        List<Arguments> finalArguments = new ArrayList<>(2 * testInputs.size());
+        for (List<Object> args : testInputs) {
+            for (Boolean aBoolean : tailArgs) {
+                List<Object> expandedArgs = new ArrayList<>(args);
+                expandedArgs.add(aBoolean);
+                finalArguments.add(Arguments.of(expandedArgs.toArray()));
+            }
+        }
+        return finalArguments;
     }
 
     private static Stream<Arguments> provideSourceBytebuffersForTest() {
