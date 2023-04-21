@@ -24,10 +24,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.spy;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -46,7 +44,7 @@ public class ChunkedBytesStreamTest {
         ByteBuffer input = ByteBuffer.allocate(8);
         int lengthGreaterThanInput = input.capacity() + 1;
         byte[] got = new byte[lengthGreaterThanInput];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             assertEquals(-1, is.read(got, 0, got.length), "Should return -1 signifying end of input");
         }
     }
@@ -55,7 +53,7 @@ public class ChunkedBytesStreamTest {
     @MethodSource("provideSourceBytebuffersForTest")
     public void testCorrectnessForMethodReadFully(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             // perform a 2 pass read. this tests the scenarios where one pass may lead to partially consumed
             // intermediate buffer
             int toRead = RANDOM.nextInt(got.length);
@@ -69,27 +67,13 @@ public class ChunkedBytesStreamTest {
     @MethodSource("provideSourceBytebuffersForTest")
     public void testCorrectnessForMethodReadByte(ByteBuffer input) throws IOException {
         byte[] got = new byte[input.array().length];
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
             int i = 0;
             while (i < got.length) {
-                got[i++] = is.readByte();
+                got[i++] = (byte) is.read();
             }
         }
         assertArrayEquals(input.array(), got);
-    }
-
-    @Test
-    public void testEofErrorForMethodReadByte() throws IOException {
-        ByteBuffer input = ByteBuffer.allocate(8);
-        int lengthGreaterThanInput = input.capacity() + 1;
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
-            assertThrows(EOFException.class, () -> {
-                int i = 0;
-                while (i++ < lengthGreaterThanInput) {
-                    is.readByte();
-                }
-            });
-        }
     }
 
     @ParameterizedTest
@@ -101,7 +85,7 @@ public class ChunkedBytesStreamTest {
         }
         int[] got = new int[inputArr.length];
         inputBuf.rewind();
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
             int i = 0;
             while (i < got.length) {
                 got[i++] = is.read();
@@ -115,7 +99,7 @@ public class ChunkedBytesStreamTest {
         ByteBuffer inputBuf = ByteBuffer.allocate(2);
         int lengthGreaterThanInput = inputBuf.capacity() + 1;
 
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf), supplier, 10, false)) {
             int cnt = 0;
             while (cnt++ < lengthGreaterThanInput) {
                 int res = is.read();
@@ -133,8 +117,8 @@ public class ChunkedBytesStreamTest {
         inputBuf.rewind();
 
         final InputStream sourcestream = spy(new ByteBufferInputStream(inputBuf));
-        try (BytesStream is = new ChunkedBytesStream(sourcestream, supplier, 10, pushSkipToSourceStream)) {
-            int res = is.skipBytes(inputBuf.capacity() + 1);
+        try (InputStream is = new ChunkedBytesStream(sourcestream, supplier, 10, pushSkipToSourceStream)) {
+            long res = is.skip(inputBuf.capacity() + 1);
             assertEquals(inputBuf.capacity(), res);
         }
     }
@@ -145,19 +129,19 @@ public class ChunkedBytesStreamTest {
         int expectedInpLeftAfterSkip = inputBuf.remaining() - bytesToPreRead - numBytesToSkip;
         int expectedSkippedBytes = Math.min(inputBuf.remaining() - bytesToPreRead, numBytesToSkip);
 
-        try (BytesStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10, pushSkipToSourceStream)) {
+        try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10, pushSkipToSourceStream)) {
             int cnt = 0;
             while (cnt++ < bytesToPreRead) {
-                is.readByte();
+                is.read();
             }
 
-            int res = is.skipBytes(numBytesToSkip);
+            long res = is.skip(numBytesToSkip);
             assertEquals(expectedSkippedBytes, res);
 
             // verify that we are able to read rest of the input
             cnt = 0;
             while (cnt++ < expectedInpLeftAfterSkip) {
-                is.readByte();
+                is.read();
             }
         }
     }

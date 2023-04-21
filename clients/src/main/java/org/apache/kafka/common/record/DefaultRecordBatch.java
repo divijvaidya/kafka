@@ -23,12 +23,11 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Crc32C;
 
-import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -268,14 +267,14 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return buffer.getInt(PARTITION_LEADER_EPOCH_OFFSET);
     }
 
-    public BytesStream recordInputStream(BufferSupplier bufferSupplier) {
+    public InputStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
         return compressionType().wrapForInput(buffer, magic(), bufferSupplier);
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
-        final BytesStream inputStream = recordInputStream(bufferSupplier);
+        final InputStream inputStream = recordInputStream(bufferSupplier);
 
         if (skipKeyValue) {
             return new StreamRecordIterator(inputStream) {
@@ -620,9 +619,9 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     // visible for testing
     abstract class StreamRecordIterator extends RecordIterator {
-        private final BytesStream inputStream;
+        private final InputStream inputStream;
 
-        StreamRecordIterator(BytesStream inputStream) {
+        StreamRecordIterator(InputStream inputStream) {
             super();
             this.inputStream = inputStream;
         }
@@ -633,7 +632,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         protected Record readNext(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) {
             try {
                 return doReadRecord(baseOffset, baseTimestamp, baseSequence, logAppendTime);
-            } catch (EOFException e) {
+            } catch (IllegalArgumentException e) {
                 throw new InvalidRecordException("Incorrect declared batch size, premature EOF reached", e);
             } catch (IOException e) {
                 throw new KafkaException("Failed to decompress record stream", e);

@@ -24,11 +24,10 @@ import org.apache.kafka.common.compress.ZstdFactory;
 import org.apache.kafka.common.utils.BufferSupplier;
 import org.apache.kafka.common.utils.ByteBufferInputStream;
 import org.apache.kafka.common.utils.ByteBufferOutputStream;
-import org.apache.kafka.common.utils.ByteBufferBytesStream;
-import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.ChunkedBytesStream;
 
 import java.io.BufferedOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.zip.GZIPInputStream;
@@ -45,8 +44,8 @@ public enum CompressionType {
         }
 
         @Override
-        public BytesStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
-            return new ByteBufferBytesStream(buffer);
+        public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
+            return new ByteBufferInputStream(buffer);
         }
     },
 
@@ -65,7 +64,7 @@ public enum CompressionType {
         }
 
         @Override
-        public BytesStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
+        public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
                 // Set input buffer (compressed) to 8 KB (GZIPInputStream uses 0.5 KB by default) to ensure reasonable
                 // performance in cases where the caller reads a small number of bytes (potentially a single byte).
@@ -96,7 +95,7 @@ public enum CompressionType {
         }
 
         @Override
-        public BytesStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
+        public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             // SnappyInputStream uses default implementation of InputStream for skip. Default implementation of
             // SnappyInputStream allocates a new skip buffer every time, hence, we prefer our own implementation.
             return new ChunkedBytesStream(SnappyFactory.wrapForInput(buffer), decompressionBufferSupplier, decompressionOutputSize(), false);
@@ -122,7 +121,7 @@ public enum CompressionType {
         }
 
         @Override
-        public BytesStream wrapForInput(ByteBuffer inputBuffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
+        public InputStream wrapForInput(ByteBuffer inputBuffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             try {
                 return new ChunkedBytesStream(
                     new KafkaLZ4BlockInputStream(inputBuffer, decompressionBufferSupplier, messageVersion == RecordBatch.MAGIC_VALUE_V0),
@@ -148,7 +147,7 @@ public enum CompressionType {
         }
 
         @Override
-        public BytesStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
+        public InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier) {
             return new ChunkedBytesStream(ZstdFactory.wrapForInput(buffer, messageVersion, decompressionBufferSupplier), decompressionBufferSupplier, decompressionOutputSize(), false);
         }
 
@@ -195,7 +194,7 @@ public enum CompressionType {
      *                                    batch. As such, a supplier that reuses buffers will have a significant
      *                                    performance impact.
      */
-    public abstract BytesStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier);
+    public abstract InputStream wrapForInput(ByteBuffer buffer, byte messageVersion, BufferSupplier decompressionBufferSupplier);
 
     /**
      * Recommended size of buffer for storing decompressed output.

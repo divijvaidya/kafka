@@ -20,11 +20,11 @@ import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.ByteUtils;
-import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.Utils;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -271,7 +271,7 @@ public class DefaultRecord implements Record {
         return result;
     }
 
-    public static DefaultRecord readFrom(BytesStream input,
+    public static DefaultRecord readFrom(InputStream input,
                                          long baseOffset,
                                          long baseTimestamp,
                                          int baseSequence,
@@ -366,7 +366,7 @@ public class DefaultRecord implements Record {
         }
     }
 
-    public static PartialDefaultRecord readPartiallyFrom(BytesStream input,
+    public static PartialDefaultRecord readPartiallyFrom(InputStream input,
                                                          long baseOffset,
                                                          long baseTimestamp,
                                                          int baseSequence,
@@ -378,14 +378,14 @@ public class DefaultRecord implements Record {
             baseSequence, logAppendTime);
     }
 
-    private static PartialDefaultRecord readPartiallyFrom(BytesStream input,
+    private static PartialDefaultRecord readPartiallyFrom(InputStream input,
                                                           int sizeInBytes,
                                                           long baseOffset,
                                                           long baseTimestamp,
                                                           int baseSequence,
                                                           Long logAppendTime) throws IOException {
         try {
-            byte attributes = input.readByte();
+            byte attributes = (byte) input.read();
             long timestampDelta = ByteUtils.readVarlong(input);
             long timestamp = baseTimestamp + timestampDelta;
             if (logAppendTime != null)
@@ -433,10 +433,10 @@ public class DefaultRecord implements Record {
      * No-op for case where bytesToSkip <= 0. This could occur for cases where field is expected to be null.
      * @throws  InvalidRecordException if the number of bytes could not be skipped.
      */
-    private static void skipBytes(BytesStream in, int bytesToSkip) throws IOException {
+    private static void skipBytes(InputStream in, int bytesToSkip) throws IOException {
         if (bytesToSkip <= 0) return;
 
-        long skippedBytes = in.skipBytes(bytesToSkip);
+        long skippedBytes = in.skip(bytesToSkip);
 
         if (skippedBytes != bytesToSkip) {
             throw new InvalidRecordException("Unable to skip the expected number of bytes. Expected:" + bytesToSkip + " Actual: " + skippedBytes);
