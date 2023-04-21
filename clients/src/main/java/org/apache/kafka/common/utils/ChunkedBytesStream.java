@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 
 /**
  * ChunkedBytesStream is a {@link BytesStream} which reads from source stream in chunks of configurable size. The
- * implementation of this reader is optimized to reduce the number of calls to sourceStream#read(). This works best in
+ * implementation of this stream is optimized to reduce the number of calls to sourceStream#read(). This works best in
  * scenarios where sourceStream#read() call is expensive, e.g. when the call crosses JNI boundary.
  * <p>
  * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
@@ -34,7 +34,9 @@ import java.nio.ByteBuffer;
  * e.g. the case of ZstdInputStream which allocates a new buffer from buffer pool, per skip call.
  * - Unlike {@link java.io.BufferedInputStream}, which allocates an intermediate buffer, this uses a buffer supplier to
  * create the intermediate buffer.
- * - Unlike {@link DataInputStream#readByte()}, the readByte method does not push the reading of a byte to sourceStream.
+ * - Unlike {@link DataInputStream#readByte()}, the readByte method does not push the reading of a byte to sourceStream,
+ * instead it read the byte from intermediate buffer.
+ * - Unlike {@link InputStream#skip(long)}, the skip() method does not allocate a new skipBuffer on every call.
  * <p>
  * Note that:
  * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
