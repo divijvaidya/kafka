@@ -19,8 +19,7 @@ package kafka.log
 
 import java.io.File
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import kafka.common.LogCleaningAbortedException
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.CoreUtils._
@@ -83,15 +82,15 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   private val uncleanablePartitions = mutable.HashMap[String, mutable.Set[TopicPartition]]()
 
   /* a global lock used to control all access to the in-progress set and the offset checkpoints */
-  private val lock = new ReentrantLock
+  private val lock = new ReentrantReadWriteLock
 
   /* for coordinating the pausing and the cleaning of a partition */
-  private val pausedCleaningCond = lock.newCondition()
+  private val pausedCleaningCond = lock.writeLock().newCondition()
 
   /* gauges for tracking the number of partitions marked as uncleanable for each log directory */
   for (dir <- logDirs) {
     metricsGroup.newGauge("uncleanable-partitions-count",
-      () => inLock(lock) { uncleanablePartitions.get(dir.getAbsolutePath).map(_.size).getOrElse(0) },
+      () => inReadLock(lock) { uncleanablePartitions.get(dir.getAbsolutePath).map(_.size).getOrElse(0) },
       Map("logDirectory" -> dir.getAbsolutePath).asJava
     )
   }
@@ -99,7 +98,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   /* gauges for tracking the number of uncleanable bytes from uncleanable partitions for each log directory */
   for (dir <- logDirs) {
     metricsGroup.newGauge("uncleanable-bytes",
-      () => inLock(lock) {
+      () => inReadLock(lock) {
         uncleanablePartitions.get(dir.getAbsolutePath) match {
           case Some(partitions) =>
             val lastClean = allCleanerCheckpoints
@@ -132,7 +131,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    * @return the position processed for all logs.
    */
   def allCleanerCheckpoints: Map[TopicPartition, Long] = {
-    inLock(lock) {
+    inReadLock(lock) {
       checkpoints.values.flatMap(checkpoint => {
         try {
           checkpoint.read()
@@ -149,7 +148,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * Package private for unit test. Get the cleaning state of the partition.
     */
   private[log] def cleaningState(tp: TopicPartition): Option[LogCleaningState] = {
-    inLock(lock) {
+    inReadLock(lock) {
       inProgress.get(tp)
     }
   }
@@ -158,7 +157,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * Package private for unit test. Set the cleaning state of the partition.
     */
   private[log] def setCleaningState(tp: TopicPartition, state: LogCleaningState): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       inProgress.put(tp, state)
     }
   }
@@ -169,7 +168,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * the log manager maintains.
     */
   def grabFilthiestCompactedLog(time: Time, preCleanStats: PreCleanStats = new PreCleanStats()): Option[LogToClean] = {
-    inLock(lock) {
+    inWriteLock(lock) {
       val now = time.milliseconds
       this.timeOfLastRun = now
       val lastClean = allCleanerCheckpoints
@@ -222,7 +221,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * @return retention logs that have log cleaning successfully paused
     */
   def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, UnifiedLog)] = {
-    inLock(lock) {
+    inWriteLock(lock) {
       val deletableLogs = logs.filter {
         case (_, log) => !log.config.compact // pick non-compacted logs
       }.filterNot {
@@ -242,7 +241,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     * that precede the start offset.
     */
   def deletableLogs(): Iterable[(TopicPartition, UnifiedLog)] = {
-    inLock(lock) {
+    inWriteLock(lock) {
       val toClean = logs.filter { case (topicPartition, log) =>
         !inProgress.contains(topicPartition) && log.config.compact &&
           !isUncleanablePartition(log, topicPartition)
@@ -259,7 +258,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    *  This is implemented by first abortAndPausing and then resuming the cleaning of the partition.
    */
   def abortCleaning(topicPartition: TopicPartition): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       abortAndPauseCleaning(topicPartition)
       resumeCleaning(Seq(topicPartition))
     }
@@ -278,7 +277,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    *     will increase the paused count by one.
    */
   def abortAndPauseCleaning(topicPartition: TopicPartition): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       inProgress.get(topicPartition) match {
         case None =>
           inProgress.put(topicPartition, LogCleaningPaused(1))
@@ -299,7 +298,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     *  Each call of this function will undo one pause.
     */
   def resumeCleaning(topicPartitions: Iterable[TopicPartition]): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       topicPartitions.foreach {
         topicPartition =>
           inProgress.get(topicPartition) match {
@@ -353,7 +352,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    *  Check if the cleaning for a partition is aborted. If so, throw an exception.
    */
   def checkCleaningAborted(topicPartition: TopicPartition): Unit = {
-    inLock(lock) {
+    inReadLock(lock) {
       if (isCleaningInState(topicPartition, LogCleaningAborted))
         throw new LogCleaningAbortedException()
     }
@@ -369,7 +368,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   def updateCheckpoints(dataDir: File,
                         partitionToUpdateOrAdd: Option[(TopicPartition, Long)] = None,
                         partitionToRemove: Option[TopicPartition] = None): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       val checkpoint = checkpoints(dataDir)
       if (checkpoint != null) {
         try {
@@ -398,7 +397,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    * alter the checkpoint directory for the topicPartition, to remove the data in sourceLogDir, and add the data in destLogDir
    */
   def alterCheckpointDir(topicPartition: TopicPartition, sourceLogDir: File, destLogDir: File): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       try {
         checkpoints.get(sourceLogDir).flatMap(_.read().get(topicPartition)) match {
           case Some(offset) =>
@@ -431,7 +430,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    */
   def handleLogDirFailure(dir: String): Unit = {
     warn(s"Stopping cleaning logs in dir $dir")
-    inLock(lock) {
+    inWriteLock(lock) {
       checkpoints = checkpoints.filter { case (k, _) => k.getAbsolutePath != dir }
     }
   }
@@ -440,7 +439,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    * Truncate the checkpointed offset for the given partition if its checkpointed offset is larger than the given offset
    */
   def maybeTruncateCheckpoint(dataDir: File, topicPartition: TopicPartition, offset: Long): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       if (logs.get(topicPartition).config.compact) {
         val checkpoint = checkpoints(dataDir)
         if (checkpoint != null) {
@@ -456,7 +455,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    * Save out the endOffset and remove the given log from the in-progress set, if not aborted.
    */
   def doneCleaning(topicPartition: TopicPartition, dataDir: File, endOffset: Long): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       inProgress.get(topicPartition) match {
         case Some(LogCleaningInProgress) =>
           updateCheckpoints(dataDir, partitionToUpdateOrAdd = Option(topicPartition, endOffset))
@@ -473,7 +472,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   }
 
   def doneDeleting(topicPartitions: Iterable[TopicPartition]): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       topicPartitions.foreach {
         topicPartition =>
           inProgress.get(topicPartition) match {
@@ -497,12 +496,12 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    */
   private[log] def uncleanablePartitions(logDir: String): Set[TopicPartition] = {
     var partitions: Set[TopicPartition] = Set()
-    inLock(lock) { partitions ++= uncleanablePartitions.getOrElse(logDir, partitions) }
+    inReadLock(lock) { partitions ++= uncleanablePartitions.getOrElse(logDir, partitions) }
     partitions
   }
 
   def markPartitionUncleanable(logDir: String, partition: TopicPartition): Unit = {
-    inLock(lock) {
+    inWriteLock(lock) {
       uncleanablePartitions.get(logDir) match {
         case Some(partitions) =>
           partitions.add(partition)
@@ -513,14 +512,14 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   }
 
   private def isUncleanablePartition(log: UnifiedLog, topicPartition: TopicPartition): Boolean = {
-    inLock(lock) {
+    inReadLock(lock) {
       uncleanablePartitions.get(log.parentDir).exists(partitions => partitions.contains(topicPartition))
     }
   }
 
   def maintainUncleanablePartitions(): Unit = {
     // Remove deleted partitions from uncleanablePartitions
-    inLock(lock) {
+    inWriteLock(lock) {
       // Note: we don't use retain or filterInPlace method in this function because retain is deprecated in
       // scala 2.13 while filterInPlace is not available in scala 2.12.
 
