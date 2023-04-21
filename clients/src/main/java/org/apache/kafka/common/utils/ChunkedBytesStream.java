@@ -201,7 +201,7 @@ public class ChunkedBytesStream extends FilterInputStream {
      *                     or an I/O error occurs.
      * @see BufferedInputStream#read(byte[], int, int)
      */
-    public synchronized int read(byte[] b, int off, int len) throws IOException {
+    public int read(byte[] b, int off, int len) throws IOException {
         getBufIfOpen(); // Check for closed stream
         if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
             throw new IndexOutOfBoundsException();

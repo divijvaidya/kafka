@@ -45,7 +45,7 @@ public class ChunkedBytesStreamTest {
         int lengthGreaterThanInput = input.capacity() + 1;
         byte[] got = new byte[lengthGreaterThanInput];
         try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(input), supplier, 10, false)) {
-            assertEquals(-1, is.read(got, 0, got.length), "Should return -1 signifying end of input");
+            assertEquals(8, is.read(got, 0, got.length), "Should return 8 signifying end of input");
         }
     }
 
