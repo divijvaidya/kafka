@@ -22,7 +22,6 @@ import org.apache.kafka.common.errors.CorruptRecordException;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.apache.kafka.common.utils.BufferSupplier;
-import org.apache.kafka.common.utils.BytesStream;
 import org.apache.kafka.common.utils.ChunkedBytesStream;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Utils;
@@ -555,7 +554,7 @@ public class DefaultRecordBatchTest {
 
         try (final BufferSupplier bufferSupplier = BufferSupplier.create();
              final InputStream zstdStream = spy(ZstdFactory.wrapForInput(recordsBuffer, batch.magic(), bufferSupplier));
-             final BytesStream chunkedStream = new ChunkedBytesStream(zstdStream, bufferSupplier, 16 * 1024, false)) {
+             final InputStream chunkedStream = new ChunkedBytesStream(zstdStream, bufferSupplier, 16 * 1024, false)) {
 
             when(mockCompression.wrapForInput(any(ByteBuffer.class), anyByte(), any(BufferSupplier.class))).thenReturn(chunkedStream);
 

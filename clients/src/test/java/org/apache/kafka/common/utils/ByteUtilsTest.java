@@ -23,6 +23,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.function.IntFunction;
 import java.util.function.LongFunction;
@@ -309,7 +310,7 @@ public class ByteUtilsTest {
         ByteUtils.writeUnsignedVarint(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        BytesStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
+        InputStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
         assertEquals(value, ByteUtils.readUnsignedVarint(in));
     }
 
@@ -325,7 +326,7 @@ public class ByteUtilsTest {
         ByteUtils.writeVarint(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        BytesStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
+        InputStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
         assertEquals(value, ByteUtils.readVarint(in));
     }
 
@@ -341,7 +342,7 @@ public class ByteUtilsTest {
         ByteUtils.writeVarlong(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        BytesStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
+        InputStream in = new ChunkedBytesStream(new ByteBufferInputStream(buf), BufferSupplier.NO_CACHING, 100, false);
         assertEquals(value, ByteUtils.readVarlong(in));
     }
 

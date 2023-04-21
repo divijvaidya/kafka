@@ -16,53 +16,56 @@
  */
 package org.apache.kafka.common.utils;
 
-import java.io.DataInputStream;
-import java.io.EOFException;
+import java.io.BufferedInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
- * ChunkedBytesStream is a {@link BytesStream} which reads from source stream in chunks of configurable size. The
- * implementation of this stream is optimized to reduce the number of calls to sourceStream#read(). This works best in
- * scenarios where sourceStream#read() call is expensive, e.g. when the call crosses JNI boundary.
- * <p>
- * The functionality of this stream is a combination of DataInput and BufferedInputStream with the following
- * differences:
+ * ChunkedBytesStream is a copy of {@link ByteBufferInputStream} with the following differences:
  * - Unlike {@link java.io.BufferedInputStream#skip(long)} this class could be configured to not push skip() to
- * sourceStream. We may want to avoid pushing this to sourceStream because it's implementation maybe inefficient,
+ * input stream. We may want to avoid pushing this to input stream because it's implementation maybe inefficient,
  * e.g. the case of ZstdInputStream which allocates a new buffer from buffer pool, per skip call.
  * - Unlike {@link java.io.BufferedInputStream}, which allocates an intermediate buffer, this uses a buffer supplier to
  * create the intermediate buffer.
- * - Unlike {@link DataInputStream#readByte()}, the readByte method does not push the reading of a byte to sourceStream,
- * instead it read the byte from intermediate buffer.
- * - Unlike {@link InputStream#skip(long)}, the skip() method does not allocate a new skipBuffer on every call.
  * <p>
  * Note that:
  * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
  * - the implementation of this class is performance sensitive. Minor changes as usage of ByteBuffer instead of byte[]
- *   can significantly impact performance, hence, proceed with caution.
+ * can significantly impact performance, hence, proceed with caution.
  */
-public class ChunkedBytesStream implements BytesStream {
+public class ChunkedBytesStream extends FilterInputStream {
     /**
      * Supplies the ByteBuffer which is used as intermediate buffer to store the chunk of output data.
      */
     private final BufferSupplier bufferSupplier;
-    /**
-     * Source stream containing compressed data.
-     */
-    private InputStream sourceStream;
     /**
      * Intermediate buffer to store the chunk of output data. The ChunkedBytesStream is considered closed if
      * this buffer is null.
      */
     private byte[] intermediateBuf;
     /**
-     * Total number of bytes written to {@link #intermediateBuf}
+     * The index one greater than the index of the last valid byte in
+     * the buffer.
+     * This value is always in the range <code>0</code> through <code>intermediateBuf.length</code>;
+     * elements <code>intermediateBuf[0]</code>  through <code>intermediateBuf[count-1]
+     * </code>contain buffered input data obtained
+     * from the underlying  input stream.
      */
-    protected int limit = 0;
+    protected int count = 0;
     /**
-     * Index for the next byte read in {@link #intermediateBuf}
+     * The current position in the buffer. This is the index of the next
+     * character to be read from the <code>buf</code> array.
+     * <p>
+     * This value is always in the range <code>0</code>
+     * through <code>count</code>. If it is less
+     * than <code>count</code>, then  <code>intermediateBuf[pos]</code>
+     * is the next byte to be supplied as input;
+     * if it is equal to <code>count</code>, then
+     * the  next <code>read</code> or <code>skip</code>
+     * operation will require more bytes to be
+     * read from the contained  input stream.
      */
     protected int pos = 0;
     /**
@@ -75,9 +78,9 @@ public class ChunkedBytesStream implements BytesStream {
      */
     private final boolean pushSkipToSourceStream;
 
-    public ChunkedBytesStream(InputStream sourceStream, BufferSupplier bufferSupplier, int intermediateBufSize, boolean pushSkipToSourceStream) {
+    public ChunkedBytesStream(InputStream in, BufferSupplier bufferSupplier, int intermediateBufSize, boolean pushSkipToSourceStream) {
+        super(in);
         this.bufferSupplier = bufferSupplier;
-        this.sourceStream = sourceStream;
         intermediateBufRef = bufferSupplier.get(intermediateBufSize);
         if (!intermediateBufRef.hasArray() || (intermediateBufRef.arrayOffset() != 0)) {
             throw new IllegalArgumentException("provided ByteBuffer lacks array or has non-zero arrayOffset");
@@ -86,6 +89,10 @@ public class ChunkedBytesStream implements BytesStream {
         this.pushSkipToSourceStream = pushSkipToSourceStream;
     }
 
+    /**
+     * Check to make sure that buffer has not been nulled out due to
+     * close; if not return it;
+     */
     private byte[] getBufIfOpen() throws IOException {
         byte[] buffer = intermediateBuf;
         if (buffer == null)
@@ -93,19 +100,35 @@ public class ChunkedBytesStream implements BytesStream {
         return buffer;
     }
 
+    /**
+     * See
+     * the general contract of the <code>read</code>
+     * method of <code>InputStream</code>.
+     *
+     * @return the next byte of data, or <code>-1</code> if the end of the
+     * stream is reached.
+     * @throws IOException if this input stream has been closed by
+     *                     invoking its {@link #close()} method,
+     *                     or an I/O error occurs.
+     * @see BufferedInputStream#read()
+     */
     @Override
     public int read() throws IOException {
-        if (pos >= limit) {
-            readChunk();
-            if (pos >= limit)
+        if (pos >= count) {
+            fill();
+            if (pos >= count)
                 return -1;
         }
 
         return getBufIfOpen()[pos++] & 0xff;
     }
 
+    /**
+     * Check to make sure that underlying input stream has not been
+     * nulled out due to close; if not return it;
+     */
     InputStream getInIfOpen() throws IOException {
-        InputStream input = sourceStream;
+        InputStream input = in;
         if (input == null)
             throw new IOException("Stream closed");
         return input;
@@ -114,19 +137,16 @@ public class ChunkedBytesStream implements BytesStream {
     /**
      * Fills the intermediate buffer with more data. The amount of new data read is equal to the remaining empty space
      * in the buffer. For optimal performance, read as much data as possible in this call.
+     * This method also assumes that all data has already been read in, hence pos > count.
      */
-    int readChunk() throws IOException {
+    int fill() throws IOException {
         byte[] buffer = getBufIfOpen();
-
-        // switch to writing mode
         pos = 0;
-        limit = pos;
-        int bytesRead = getInIfOpen().read(buffer, pos, buffer.length - pos);
-
-        if (bytesRead > 0)
-            limit = bytesRead + pos;
-
-        return bytesRead;
+        count = pos;
+        int n = getInIfOpen().read(buffer, pos, buffer.length - pos);
+        if (n > 0)
+            count = n + pos;
+        return n;
     }
 
     @Override
@@ -134,8 +154,8 @@ public class ChunkedBytesStream implements BytesStream {
         byte[] mybuf = intermediateBuf;
         intermediateBuf = null;
 
-        InputStream input = sourceStream;
-        sourceStream = null;
+        InputStream input = in;
+        in = null;
 
         if (mybuf != null)
             bufferSupplier.release(intermediateBufRef);
@@ -143,62 +163,131 @@ public class ChunkedBytesStream implements BytesStream {
             input.close();
     }
 
-    @Override
+    /**
+     * Reads bytes from this byte-input stream into the specified byte array,
+     * starting at the given offset.
+     *
+     * <p> This method implements the general contract of the corresponding
+     * <code>{@link InputStream#read(byte[], int, int) read}</code> method of
+     * the <code>{@link InputStream}</code> class.  As an additional
+     * convenience, it attempts to read as many bytes as possible by repeatedly
+     * invoking the <code>read</code> method of the underlying stream.  This
+     * iterated <code>read</code> continues until one of the following
+     * conditions becomes true: <ul>
+     *
+     * <li> The specified number of bytes have been read,
+     *
+     * <li> The <code>read</code> method of the underlying stream returns
+     * <code>-1</code>, indicating end-of-file, or
+     *
+     * <li> The <code>available</code> method of the underlying stream
+     * returns zero, indicating that further input requests would block.
+     *
+     * </ul> If the first <code>read</code> on the underlying stream returns
+     * <code>-1</code> to indicate end-of-file then this method returns
+     * <code>-1</code>.  Otherwise this method returns the number of bytes
+     * actually read.
+     *
+     * <p> Subclasses of this class are encouraged, but not required, to
+     * attempt to read as many bytes as possible in the same fashion.
+     *
+     * @param b   destination buffer.
+     * @param off offset at which to start storing bytes.
+     * @param len maximum number of bytes to read.
+     * @return the number of bytes read, or <code>-1</code> if the end of
+     * the stream has been reached.
+     * @throws IOException if this input stream has been closed by
+     *                     invoking its {@link #close()} method,
+     *                     or an I/O error occurs.
+     * @see BufferedInputStream#read(byte[], int, int)
+     */
     public int read(byte[] b, int off, int len) throws IOException {
+        getBufIfOpen(); // Check for closed stream
         if ((off | len | (off + len) | (b.length - (off + len))) < 0) {
             throw new IndexOutOfBoundsException();
         } else if (len == 0) {
             return 0;
         }
 
-        int totalRead = 0;
-        int bytesRead = 0;
-        while (totalRead < len) {
-            bytesRead = 0;
-            int toRead = len - totalRead;
-            if (pos >= limit) {
-                if (toRead >= getBufIfOpen().length) {
-                    // don't use intermediate buffer if we need to read more than it's capacity
-                    bytesRead = getInIfOpen().read(b, off + totalRead, toRead);
-                    if (bytesRead < 0)
-                        break;
-                } else {
-                    readChunk();
-                    if (pos >= limit)
-                        break;
-                }
-            } else {
-                int avail = limit - pos;
-                toRead = (avail < toRead) ? avail : toRead;
-                System.arraycopy(getBufIfOpen(), pos, b, off + totalRead, toRead);
-                pos += toRead;
-                bytesRead = toRead;
-            }
-
-            totalRead += bytesRead;
+        int n = 0;
+        for (; ; ) {
+            int nread = read1(b, off + n, len - n);
+            if (nread <= 0)
+                return (n == 0) ? nread : n;
+            n += nread;
+            if (n >= len)
+                return n;
+            // if not closed but no bytes available, return
+            InputStream input = in;
+            if (input != null && input.available() <= 0)
+                return n;
         }
-
-        if ((bytesRead <= 0) && (totalRead < len))
-            return -1;
-
-        return totalRead;
     }
 
     /**
-     * This implementation of skip reads the data from sourceStream in chunks, copies the data into intermediate buffer
+     * Read characters into a portion of an array, reading from the underlying
+     * stream at most once if necessary.
+     * <p>
+     * Note - Implementation copied from {@link BufferedInputStream}. Slight modification done to remove
+     * the mark position.
+     */
+    private int read1(byte[] b, int off, int len) throws IOException {
+        int avail = count - pos;
+        if (avail <= 0) {
+            /* If the requested length is at least as large as the buffer, and
+               if there is no mark/reset activity, do not bother to copy the
+               bytes into the local buffer.  In this way buffered streams will
+               cascade harmlessly. */
+            if (len >= getBufIfOpen().length) {
+                return getInIfOpen().read(b, off, len);
+            }
+            fill();
+            avail = count - pos;
+            if (avail <= 0) return -1;
+        }
+        int cnt = (avail < len) ? avail : len;
+        System.arraycopy(getBufIfOpen(), pos, b, off, cnt);
+        pos += cnt;
+        return cnt;
+    }
+
+    /**
+     * Skips over and discards exactly {@code n} bytes of data from this input stream.
+     * If {@code n} is zero, then no bytes are skipped.
+     * If {@code n} is negative, then no bytes are skipped.
+     * <p>
+     * This method blocks until the requested number of bytes has been skipped, end of file is reached, or an
+     * exception is thrown.
+     * <p> If end of stream is reached before the stream is at the desired position, then the bytes skipped till than pointed
+     * are returned.
+     * <p> If an I/O error occurs, then the input stream may be in an inconsistent state. It is strongly recommended that the
+     * stream be promptly closed if an I/O error occurs.
+     * <p>
+     * This method first skips and discards bytes in the intermediate buffer.
+     * After that, depending on the value of pushSkipToSourceStream, it either pushes down skippping of bytes to the
+     * sourceStream or it reads the data from input stream in chunks, copies the data into intermediate buffer
      * and skips it.
+     * <p>
+     * Starting JDK 12, a new method was introduced in InputStream, skipNBytes which has a similar behaviour as
+     * this method.
+     *
+     * @param toSkip the number of bytes to be skipped.
+     * @return the actual number of bytes skipped which might be zero.
+     * @throws IOException if this input stream has been closed by invoking its {@link #close()} method,
+     *                     {@code in.skip(n)} throws an IOException, or an I/O error occurs.
      */
     @Override
-    public int skipBytes(int toSkip) throws IOException {
+    public long skip(long toSkip) throws IOException {
+        getBufIfOpen(); // Check for closed stream
         if (toSkip <= 0) {
             return 0;
         }
 
-        int remaining = toSkip;
+        long remaining = toSkip;
 
         // Skip bytes stored in intermediate buffer first
-        int avail = limit - pos;
-        int chunkSkipped = (avail < remaining) ? avail : remaining;
+        int avail = count - pos;
+        long chunkSkipped = (avail < remaining) ? avail : remaining;
         pos += chunkSkipped;
         remaining -= chunkSkipped;
 
@@ -206,17 +295,26 @@ public class ChunkedBytesStream implements BytesStream {
             if (pushSkipToSourceStream) {
                 // Use sourceStream's skip() to skip the rest.
                 // conversion to int is acceptable because toSkip and remaining are int.
-                chunkSkipped = (int) getInIfOpen().skip(remaining);
-                if (chunkSkipped <= 0)
-                    break;
+                chunkSkipped = getInIfOpen().skip(remaining);
+                if (chunkSkipped == 0) {
+                    // read one byte to check for EOS
+                    if (read() == -1) {
+                        break;
+                    }
+                    // one byte read so decrement number to skip
+                    remaining--;
+                } else if (chunkSkipped > remaining || chunkSkipped < 0) { // skipped negative or too many bytes
+                    throw new IOException("Unable to skip exactly");
+                }
             } else {
-                if (pos >= limit) {
-                    readChunk();
+                // skip from intermediate buffer, filling it first (if required)
+                if (pos >= count) {
+                    fill();
                     // if we don't have data in intermediate buffer after fill, then stop skipping
-                    if (pos >= limit)
+                    if (pos >= count)
                         break;
                 }
-                avail = limit - pos;
+                avail = count - pos;
                 chunkSkipped = (avail < remaining) ? avail : remaining;
                 pos += chunkSkipped;
             }
@@ -225,18 +323,35 @@ public class ChunkedBytesStream implements BytesStream {
         return toSkip - remaining;
     }
 
-    @Override
-    public byte readByte() throws IOException {
-        if (pos >= limit) {
-            readChunk();
-            if (pos >= limit)
-                throw new EOFException();
-        }
-        return getBufIfOpen()[pos++];
-    }
-
     // visible for testing
     public InputStream sourceStream() {
-        return sourceStream;
+        return in;
+    }
+
+    /**
+     * Returns an estimate of the number of bytes that can be read (or
+     * skipped over) from this input stream without blocking by the next
+     * invocation of a method for this input stream. The next invocation might be
+     * the same thread or another thread.  A single read or skip of this
+     * many bytes will not block, but may read or skip fewer bytes.
+     * <p>
+     * This method returns the sum of the number of bytes remaining to be read in
+     * the buffer (<code>count&nbsp;- pos</code>) and the result of calling the
+     * {@link java.io.FilterInputStream#in in}.available().
+     *
+     * @return an estimate of the number of bytes that can be read (or skipped
+     * over) from this input stream without blocking.
+     * @throws IOException if this input stream has been closed by
+     *                     invoking its {@link #close()} method,
+     *                     or an I/O error occurs.
+     * @see BufferedInputStream#available()
+     */
+    @Override
+    public synchronized int available() throws IOException {
+        int n = count - pos;
+        int avail = getInIfOpen().available();
+        return n > (Integer.MAX_VALUE - avail)
+            ? Integer.MAX_VALUE
+            : n + avail;
     }
 }
