@@ -423,10 +423,8 @@ public class DefaultRecordBatchTest {
             // one sample with large value size
             new SimpleRecord(1000L, "abc".getBytes(), largeRecordValue),
             // one sample with headers, one of the header has null value
-            new SimpleRecord(9999L, "abc".getBytes(), "0".getBytes(), headers),
-            // one same with large value size
             new SimpleRecord(9999L, "abc".getBytes(), "0".getBytes(), headers)
-            );
+        );
 
         DefaultRecordBatch batch = new DefaultRecordBatch(records.buffer());
 
