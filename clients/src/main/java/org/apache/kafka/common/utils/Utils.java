@@ -17,6 +17,7 @@
 package org.apache.kafka.common.utils;
 
 import java.nio.BufferUnderflowException;
+import java.nio.ByteOrder;
 import java.nio.file.StandardOpenOption;
 import java.util.AbstractMap;
 import java.util.EnumSet;
@@ -743,6 +744,36 @@ public final class Utils {
     }
 
     /**
+     * Reads bytes from a source buffer and returns a new buffer.
+     * <p> The content of the new buffer will start at this buffer's current
+     * position.  Changes to this buffer's content will be visible in the new
+     * buffer, and vice versa; the two buffers' position, limit, and mark
+     * values will be independent.
+     *
+     * <p> The new buffer's position will be zero, its limit will be the number of bytes
+     * read i.e. <code>bytesToRead</code>, it's capacity will be the number of bytes remaining in
+     * source buffer , its mark will be undefined, and its byte order will be {@link ByteOrder#BIG_ENDIAN BIG_ENDIAN}.
+     *
+     * <p>Since JDK 13, this method could be replaced with slice(int index, int length).
+     *
+     * @param srcBuf Source buffer where data is read from
+     * @param bytesToRead Number of bytes to read
+     * @return Destination buffer or null if bytesToRead is < 0
+     *
+     * @see ByteBuffer#slice()
+     */
+    public static ByteBuffer readBytes(ByteBuffer srcBuf, int bytesToRead) {
+        if (bytesToRead < 0)
+            return null;
+
+        final ByteBuffer dstBuf = srcBuf.slice();
+        dstBuf.limit(bytesToRead);
+        srcBuf.position(srcBuf.position() + bytesToRead);
+
+        return dstBuf;
+    }
+
+    /**
      * Read a file as string and return the content. The file is treated as a stream and no seek is performed.
      * This allows the program to read from a regular file as well as from a pipe/fifo.
      */
@@ -1194,7 +1225,7 @@ public final class Utils {
      *
      * @param inputStream       Input stream to read from
      * @param destinationBuffer The buffer into which bytes are to be transferred (it must be backed by an array)
-     * @return
+     * @return number of byte read from the input stream
      * @throws IOException If an I/O error occurs
      */
     public static int readFully(InputStream inputStream, ByteBuffer destinationBuffer) throws IOException {

@@ -100,7 +100,7 @@ public class DefaultRecordTest {
         buffer.flip();
         buffer.put(14, (byte) 8);
         // test for input stream input
-        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.duplicate())) {
+        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.asReadOnlyBuffer())) {
             assertThrows(InvalidRecordException.class,
                 () -> DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, baseSequence, null));
         }
@@ -467,7 +467,7 @@ public class DefaultRecordTest {
         buffer.flip();
 
         // test for input stream input
-        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.duplicate())) {
+        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buffer.asReadOnlyBuffer())) {
             DefaultRecord record = DefaultRecord.readFrom(inpStream, baseOffset, baseTimestamp, RecordBatch.NO_SEQUENCE, null);
             assertNotNull(record);
             assertEquals(RecordBatch.NO_SEQUENCE, record.sequence());
@@ -499,7 +499,7 @@ public class DefaultRecordTest {
 
     private static void assertDecodingRecordFromBufferThrowsInvalidRecordException(ByteBuffer buf) throws IOException {
         // test for input stream input
-        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buf.duplicate())) {
+        try (ByteBufferInputStream inpStream = new ByteBufferInputStream(buf.asReadOnlyBuffer())) {
             assertThrows(InvalidRecordException.class,
                 () -> DefaultRecord.readFrom(inpStream, 0L, 0L, RecordBatch.NO_SEQUENCE, null));
         }
