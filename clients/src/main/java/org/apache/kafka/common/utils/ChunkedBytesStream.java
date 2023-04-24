@@ -32,7 +32,7 @@ import java.nio.ByteBuffer;
  * <p>
  * Note that:
  * - this class is not thread safe and shouldn't be used in scenarios where multiple threads access this.
- * - the implementation of this class is performance sensitive. Minor changes as usage of ByteBuffer instead of byte[]
+ * - the implementation of this class is performance sensitive. Minor changes such as usage of ByteBuffer instead of byte[]
  * can significantly impact performance, hence, proceed with caution.
  */
 public class ChunkedBytesStream extends FilterInputStream {
