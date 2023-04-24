@@ -287,23 +287,23 @@ public class ChunkedBytesStream extends FilterInputStream {
 
         // Skip bytes stored in intermediate buffer first
         int avail = count - pos;
-        long chunkSkipped = (avail < remaining) ? avail : remaining;
-        pos += chunkSkipped;
-        remaining -= chunkSkipped;
+        long bytesSkipped = (avail < remaining) ? avail : remaining;
+        pos += bytesSkipped;
+        remaining -= bytesSkipped;
 
         while (remaining > 0) {
             if (pushSkipToSourceStream) {
                 // Use sourceStream's skip() to skip the rest.
                 // conversion to int is acceptable because toSkip and remaining are int.
-                chunkSkipped = getInIfOpen().skip(remaining);
-                if (chunkSkipped == 0) {
+                bytesSkipped = getInIfOpen().skip(remaining);
+                if (bytesSkipped == 0) {
                     // read one byte to check for EOS
                     if (read() == -1) {
                         break;
                     }
                     // one byte read so decrement number to skip
                     remaining--;
-                } else if (chunkSkipped > remaining || chunkSkipped < 0) { // skipped negative or too many bytes
+                } else if (bytesSkipped > remaining || bytesSkipped < 0) { // skipped negative or too many bytes
                     throw new IOException("Unable to skip exactly");
                 }
             } else {
@@ -315,10 +315,10 @@ public class ChunkedBytesStream extends FilterInputStream {
                         break;
                 }
                 avail = count - pos;
-                chunkSkipped = (avail < remaining) ? avail : remaining;
-                pos += chunkSkipped;
+                bytesSkipped = (avail < remaining) ? avail : remaining;
+                pos += bytesSkipped;
             }
-            remaining -= chunkSkipped;
+            remaining -= bytesSkipped;
         }
         return toSkip - remaining;
     }

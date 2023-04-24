@@ -278,12 +278,16 @@ public class DefaultRecord implements Record {
                                          Long logAppendTime) throws IOException {
         int sizeOfBodyInBytes = ByteUtils.readVarint(input);
         ByteBuffer recordBuffer = ByteBuffer.allocate(sizeOfBodyInBytes);
-        int bytesRead = input.read(recordBuffer.array(), 0, sizeOfBodyInBytes);
-        if (bytesRead == -1)
+        int bytesRead = Utils.readFully(input, recordBuffer);
+        if (bytesRead != sizeOfBodyInBytes)
             throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
                 " bytes in record payload, but the record payload reached EOF.");
-        recordBuffer.position(recordBuffer.position() + bytesRead);
         recordBuffer.flip(); // prepare for reading
+
+        if (recordBuffer.remaining() < sizeOfBodyInBytes)
+            throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
+                " bytes in record payload, but instead the buffer has only " + recordBuffer.remaining() +
+                " remaining bytes.");
 
         int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
         return readFrom(recordBuffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,

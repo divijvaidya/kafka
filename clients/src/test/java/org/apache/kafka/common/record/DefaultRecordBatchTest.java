@@ -39,8 +39,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.apache.kafka.common.record.DefaultRecordBatch.RECORDS_COUNT_OFFSET;
@@ -64,9 +62,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class DefaultRecordBatchTest {
-    private static final int MAX_HEADER_SIZE = 5;
-    private static final int HEADER_KEY_SIZE = 30;
-
     @Test
     public void testWriteEmptyHeader() {
         long producerId = 23423L;
@@ -352,44 +347,6 @@ public class DefaultRecordBatchTest {
                 new SimpleRecord(3L, "c".getBytes(), "3".getBytes()));
         DefaultRecordBatch batch = new DefaultRecordBatch(records.buffer());
         assertThrows(IllegalArgumentException.class, () -> batch.setMaxTimestamp(TimestampType.NO_TIMESTAMP_TYPE, RecordBatch.NO_TIMESTAMP));
-    }
-
-    private static Header[] createHeaders() {
-        char[] headerChars = new char[HEADER_KEY_SIZE];
-        Arrays.fill(headerChars, 'a');
-        String headerKey = new String(headerChars);
-        byte[] headerValue = new byte[0];
-        return IntStream.range(0, MAX_HEADER_SIZE).mapToObj(index -> new Header() {
-            @Override
-            public String key() {
-                return headerKey;
-            }
-
-            @Override
-            public byte[] value() {
-                return headerValue;
-            }
-        }).toArray(Header[]::new);
-    }
-
-    private ByteBuffer createBatch(int batchSize) {
-        Random random = new Random(0);
-        // Magic v1 does not support record headers
-        Header[] headers = createHeaders();
-        byte[] value = new byte[10];
-        final ByteBuffer buf = ByteBuffer.allocate(
-            AbstractRecords.estimateSizeInBytesUpperBound(RecordBatch.MAGIC_VALUE_V2, CompressionType.ZSTD, new byte[0], value,
-                headers) * batchSize
-        );
-
-        final MemoryRecordsBuilder builder =
-            MemoryRecords.builder(buf, RecordBatch.MAGIC_VALUE_V2, CompressionType.ZSTD, TimestampType.CREATE_TIME, 0);
-
-        for (int i = 0; i < batchSize; ++i) {
-            random.nextBytes(value);
-            builder.append(0, null, value, headers);
-        }
-        return builder.build().buffer();
     }
 
     @Test

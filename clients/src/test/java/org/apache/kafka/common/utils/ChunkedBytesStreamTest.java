@@ -24,6 +24,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.Mockito.spy;
 
 import java.io.IOException;
@@ -104,7 +105,7 @@ public class ChunkedBytesStreamTest {
             while (cnt++ < lengthGreaterThanInput) {
                 int res = is.read();
                 if (cnt > inputBuf.capacity())
-                    assertEquals(-1, res, "enf of file for read should be -1");
+                    assertEquals(-1, res, "end of file for read should be -1");
             }
         }
     }
@@ -132,7 +133,8 @@ public class ChunkedBytesStreamTest {
         try (InputStream is = new ChunkedBytesStream(new ByteBufferInputStream(inputBuf.duplicate()), supplier, 10, pushSkipToSourceStream)) {
             int cnt = 0;
             while (cnt++ < bytesToPreRead) {
-                is.read();
+                int r = is.read();
+                assertNotEquals(-1, r, "Unexpected end of data.");
             }
 
             long res = is.skip(numBytesToSkip);
@@ -141,7 +143,8 @@ public class ChunkedBytesStreamTest {
             // verify that we are able to read rest of the input
             cnt = 0;
             while (cnt++ < expectedInpLeftAfterSkip) {
-                is.read();
+                int readRes = is.read();
+                assertNotEquals(-1, readRes, "Unexpected end of data.");
             }
         }
     }
