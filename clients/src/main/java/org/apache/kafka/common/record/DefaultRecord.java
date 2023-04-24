@@ -283,14 +283,7 @@ public class DefaultRecord implements Record {
             throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
                 " bytes in record payload, but the record payload reached EOF.");
         recordBuffer.flip(); // prepare for reading
-
-        if (recordBuffer.remaining() < sizeOfBodyInBytes)
-            throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
-                " bytes in record payload, but instead the buffer has only " + recordBuffer.remaining() +
-                " remaining bytes.");
-
-        int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
-        return readFrom(recordBuffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
+        return readFrom(recordBuffer, sizeOfBodyInBytes, baseOffset, baseTimestamp,
                 baseSequence, logAppendTime);
     }
 
@@ -300,23 +293,20 @@ public class DefaultRecord implements Record {
                                          int baseSequence,
                                          Long logAppendTime) {
         int sizeOfBodyInBytes = ByteUtils.readVarint(buffer);
-        if (buffer.remaining() < sizeOfBodyInBytes)
-            throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
-                " bytes in record payload, but instead the buffer has only " + buffer.remaining() +
-                " remaining bytes.");
-
-        int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
-        return readFrom(buffer, totalSizeInBytes, sizeOfBodyInBytes, baseOffset, baseTimestamp,
-                baseSequence, logAppendTime);
+        return readFrom(buffer, sizeOfBodyInBytes, baseOffset, baseTimestamp,
+            baseSequence, logAppendTime);
     }
 
     private static DefaultRecord readFrom(ByteBuffer buffer,
-                                          int sizeInBytes,
                                           int sizeOfBodyInBytes,
                                           long baseOffset,
                                           long baseTimestamp,
                                           int baseSequence,
                                           Long logAppendTime) {
+        if (buffer.remaining() < sizeOfBodyInBytes)
+            throw new InvalidRecordException("Invalid record size: expected " + sizeOfBodyInBytes +
+                " bytes in record payload, but instead the buffer has only " + buffer.remaining() +
+                " remaining bytes.");
         try {
             int recordStart = buffer.position();
             byte attributes = buffer.get();
@@ -331,21 +321,13 @@ public class DefaultRecord implements Record {
                     DefaultRecordBatch.incrementSequence(baseSequence, offsetDelta) :
                     RecordBatch.NO_SEQUENCE;
 
-            ByteBuffer key = null;
+            // read key
             int keySize = ByteUtils.readVarint(buffer);
-            if (keySize >= 0) {
-                key = buffer.slice();
-                key.limit(keySize);
-                buffer.position(buffer.position() + keySize);
-            }
+            ByteBuffer key = Utils.readBytes(buffer, keySize);
 
-            ByteBuffer value = null;
+            // read value
             int valueSize = ByteUtils.readVarint(buffer);
-            if (valueSize >= 0) {
-                value = buffer.slice();
-                value.limit(valueSize);
-                buffer.position(buffer.position() + valueSize);
-            }
+            ByteBuffer value = Utils.readBytes(buffer, valueSize);
 
             int numHeaders = ByteUtils.readVarint(buffer);
             if (numHeaders < 0)
@@ -364,7 +346,8 @@ public class DefaultRecord implements Record {
                 throw new InvalidRecordException("Invalid record size: expected to read " + sizeOfBodyInBytes +
                         " bytes in record payload, but instead read " + (buffer.position() - recordStart));
 
-            return new DefaultRecord(sizeInBytes, attributes, offset, timestamp, sequence, key, value, headers);
+            int totalSizeInBytes = ByteUtils.sizeOfVarint(sizeOfBodyInBytes) + sizeOfBodyInBytes;
+            return new DefaultRecord(totalSizeInBytes, attributes, offset, timestamp, sequence, key, value, headers);
         } catch (BufferUnderflowException | IllegalArgumentException e) {
             throw new InvalidRecordException("Found invalid record structure", e);
         }
@@ -454,17 +437,10 @@ public class DefaultRecord implements Record {
             if (headerKeySize < 0)
                 throw new InvalidRecordException("Invalid negative header key size " + headerKeySize);
 
-            ByteBuffer headerKeyBuffer = buffer.slice();
-            headerKeyBuffer.limit(headerKeySize);
-            buffer.position(buffer.position() + headerKeySize);
+            ByteBuffer headerKeyBuffer = Utils.readBytes(buffer, headerKeySize);
 
-            ByteBuffer headerValue = null;
             int headerValueSize = ByteUtils.readVarint(buffer);
-            if (headerValueSize >= 0) {
-                headerValue = buffer.slice();
-                headerValue.limit(headerValueSize);
-                buffer.position(buffer.position() + headerValueSize);
-            }
+            ByteBuffer headerValue = Utils.readBytes(buffer, headerValueSize);
 
             headers[i] = new RecordHeader(headerKeyBuffer, headerValue);
         }
