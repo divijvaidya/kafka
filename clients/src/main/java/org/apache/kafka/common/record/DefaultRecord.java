@@ -423,10 +423,23 @@ public class DefaultRecord implements Record {
     private static void skipBytes(InputStream in, int bytesToSkip) throws IOException {
         if (bytesToSkip <= 0) return;
 
-        long skippedBytes = in.skip(bytesToSkip);
-
-        if (skippedBytes != bytesToSkip) {
-            throw new InvalidRecordException("Unable to skip the expected number of bytes. Expected:" + bytesToSkip + " Actual: " + skippedBytes);
+        // Starting JDK 12, this implementation could be replaced by InputStream#skipNBytes
+        while (bytesToSkip > 0) {
+            long ns = in.skip(bytesToSkip);
+            if (ns > 0 && ns <= bytesToSkip) {
+                // adjust number to skip
+                bytesToSkip -= ns;
+            } else if (ns == 0) { // no bytes skipped
+                // read one byte to check for EOS
+                if (in.read() == -1) {
+                    throw new InvalidRecordException("Reached end of input stream before skipping all bytes. " +
+                        "Remaining bytes:" + bytesToSkip);
+                }
+                // one byte read so decrement number to skip
+                bytesToSkip--;
+            } else { // skipped negative or too many bytes
+                throw new IOException("Unable to skip exactly");
+            }
         }
     }
 

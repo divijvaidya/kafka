@@ -39,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Stream;
 
 import static org.apache.kafka.common.record.DefaultRecordBatch.RECORDS_COUNT_OFFSET;
@@ -62,6 +63,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class DefaultRecordBatchTest {
+    private static final Random RANDOM;
+
+    static {
+        try {
+            RANDOM = SecureRandom.getInstanceStrong();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     public void testWriteEmptyHeader() {
         long producerId = 23423L;
@@ -397,7 +408,7 @@ public class DefaultRecordBatchTest {
     public void testSkipKeyValueIteratorCorrectness(CompressionType compressionType) throws NoSuchAlgorithmException {
         Header[] headers = {new RecordHeader("k1", "v1".getBytes()), new RecordHeader("k2", null)};
         byte[] largeRecordValue = new byte[200 * 1024]; // 200KB
-        SecureRandom.getInstanceStrong().nextBytes(largeRecordValue);
+        RANDOM.nextBytes(largeRecordValue);
 
         MemoryRecords records = MemoryRecords.withRecords(RecordBatch.MAGIC_VALUE_V2, 0L,
             compressionType, TimestampType.CREATE_TIME,
@@ -412,6 +423,8 @@ public class DefaultRecordBatchTest {
             // one sample with large value size
             new SimpleRecord(1000L, "abc".getBytes(), largeRecordValue),
             // one sample with headers, one of the header has null value
+            new SimpleRecord(9999L, "abc".getBytes(), "0".getBytes(), headers),
+            // one same with large value size
             new SimpleRecord(9999L, "abc".getBytes(), "0".getBytes(), headers)
             );
 
@@ -469,17 +482,19 @@ public class DefaultRecordBatchTest {
     private static Stream<Arguments> testBufferReuseInSkipKeyValueIterator() throws NoSuchAlgorithmException {
         byte[] smallRecordValue = "1".getBytes();
         byte[] largeRecordValue = new byte[512 * 1024]; // 512KB
-        SecureRandom.getInstanceStrong().nextBytes(largeRecordValue);
+        RANDOM.nextBytes(largeRecordValue);
 
         return Stream.of(
             /*
-             * 1 allocation per batch (i.e. per iterator instance) for buffer holding compressed data
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding uncompressed data
-             * = 2 buffer allocations
+             * = 1 buffer allocations
              */
-            Arguments.of(CompressionType.LZ4, 2, smallRecordValue),
+            Arguments.of(CompressionType.LZ4, 1, smallRecordValue),
             Arguments.of(CompressionType.GZIP, 1, smallRecordValue),
-            Arguments.of(CompressionType.SNAPPY, 1, smallRecordValue),
+            /*
+             * We do not use buffer supplier for snappy.
+             */
+            Arguments.of(CompressionType.SNAPPY, 0, smallRecordValue),
             /*
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding compressed data
              * 1 allocation per batch (i.e. per iterator instance) for buffer holding uncompressed data
@@ -530,7 +545,7 @@ public class DefaultRecordBatchTest {
     private static Stream<Arguments> testZstdJniForSkipKeyValueIterator() throws NoSuchAlgorithmException {
         byte[] smallRecordValue = "1".getBytes();
         byte[] largeRecordValue = new byte[40 * 1024]; // 40KB
-        SecureRandom.getInstanceStrong().nextBytes(largeRecordValue);
+        RANDOM.nextBytes(largeRecordValue);
 
         return Stream.of(
             /*
