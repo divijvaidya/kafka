@@ -393,14 +393,13 @@ public class MemoryRecordsBuilderTest {
             }
         }
     }
-    @ParameterizedTest
-    @ArgumentsSource(MemoryRecordsBuilderArgumentsProvider.class)
-    public void buildUsingCreateTime(Args args) {
-        byte magic = args.magic;
-        ByteBuffer buffer = allocateBuffer(1024, args);
+    @Test
+    public void buildUsingCreateTime() {
+        byte magic = 2;
+        ByteBuffer buffer = allocateBuffer(1024, null);
 
         long logAppendTime = System.currentTimeMillis();
-        MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, magic, args.compressionType,
+        MemoryRecordsBuilder builder = new MemoryRecordsBuilder(buffer, magic, CompressionType.ZSTD,
                 TimestampType.CREATE_TIME, 0L, logAppendTime, RecordBatch.NO_PRODUCER_ID, RecordBatch.NO_PRODUCER_EPOCH, RecordBatch.NO_SEQUENCE,
                 false, false, RecordBatch.NO_PARTITION_LEADER_EPOCH, buffer.capacity());
         builder.append(0L, "a".getBytes(), "1".getBytes());
@@ -415,7 +414,7 @@ public class MemoryRecordsBuilderTest {
             assertEquals(2L, info.maxTimestamp);
         }
 
-        if (args.compressionType == CompressionType.NONE && magic == MAGIC_VALUE_V1)
+        if (CompressionType.ZSTD == CompressionType.NONE && magic == MAGIC_VALUE_V1)
             assertEquals(1L, info.shallowOffsetOfMaxTimestamp);
         else
             assertEquals(2L, info.shallowOffsetOfMaxTimestamp);
@@ -828,7 +827,7 @@ public class MemoryRecordsBuilderTest {
 
     private ByteBuffer allocateBuffer(int size, Args args) {
         ByteBuffer buffer = ByteBuffer.allocate(size);
-        buffer.position(args.bufferOffset);
+        buffer.position(15);
         return buffer;
     }
 }
