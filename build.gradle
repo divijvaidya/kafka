@@ -1327,9 +1327,9 @@ project(':clients') {
 
   dependencies {
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64", version: "2.0.61.Final")
-    implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-aarch_64", version: "2.0.61.Final")
+    //implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-aarch_64", version: "2.0.61.Final")
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-x86_64", version: "2.0.61.Final")
-    implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-aarch_64", version: "2.0.61.Final")
+    //implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-aarch_64", version: "2.0.61.Final")
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64-fedora", version: "2.0.61.Final")
     implementation libs.zstd
     implementation libs.lz4
