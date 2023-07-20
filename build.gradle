@@ -108,6 +108,8 @@ ext {
   generatedDocsDir = new File("${project.rootDir}/docs/generated")
 
   commitId = determineCommitId()
+
+  tcNativeBaseDir = file("$buildDir/native-libs")
 }
 
 allprojects {
@@ -1320,11 +1322,14 @@ project(':clients') {
 
   configurations {
     generator
+    tcNative
   }
 
   dependencies {
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64", version: "2.0.61.Final")
+    implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-aarch_64", version: "2.0.61.Final")
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-x86_64", version: "2.0.61.Final")
+    implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-aarch_64", version: "2.0.61.Final")
     implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64-fedora", version: "2.0.61.Final")
     implementation libs.zstd
     implementation libs.lz4
@@ -1348,6 +1353,7 @@ project(':clients') {
     testRuntimeOnly libs.jacksonJDK8Datatypes
 
     generator project(':generator')
+    tcNative "io.netty:netty-tcnative:2.0.61.Final:osx-x86_64"
   }
 
   task createVersionFile() {
@@ -1410,6 +1416,13 @@ project(':clients') {
     outputs.dir("src/generated-test/java/org/apache/kafka/common/message")
   }
 
+  task extractTcNativeLibs(type: Copy) {
+    dependsOn configurations.tcNative
+    from { configurations.tcNative.collect { zipTree(it) } }
+    into tcNativeBaseDir
+    duplicatesStrategy 'exclude'
+  }
+
   sourceSets {
     main {
       java {
@@ -1424,9 +1437,11 @@ project(':clients') {
   }
 
   compileJava.dependsOn 'processMessages'
+  compileJava.dependsOn 'extractTcNativeLibs'
   srcJar.dependsOn 'processMessages'
 
   compileTestJava.dependsOn 'processTestMessages'
+  compileTestJava.dependsOn 'extractTcNativeLibs'
 
   javadoc {
     include "**/org/apache/kafka/clients/admin/*"
@@ -1550,6 +1565,8 @@ project(':raft') {
     enabled = false
   }
 }
+
+
 
 project(':server-common') {
   archivesBaseName = "kafka-server-common"

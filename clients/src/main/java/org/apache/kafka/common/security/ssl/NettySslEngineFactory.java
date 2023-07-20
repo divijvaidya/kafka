@@ -147,7 +147,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
 
     @Override
     public SSLEngine createClientSslEngine(String peerHost, int peerPort, String endpointIdentification) {
-        return null;
+        return createSslEngine(Mode.CLIENT, peerHost, peerPort);
     }
 
     @Override
@@ -157,7 +157,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
 
     private SSLEngine createSslEngine(Mode mode, String peerHost, int peerPort) {
         SSLEngine sslEngine = sslContext.newEngine(UnpooledByteBufAllocator.DEFAULT, peerHost, peerPort);
-        sslEngine.setUseClientMode(false);
+        sslEngine.setUseClientMode(mode == Mode.CLIENT);
         return sslEngine;
     }
 

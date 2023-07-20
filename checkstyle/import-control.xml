@@ -135,6 +135,7 @@
       <subpackage name="ssl">
         <allow pkg="javax.crypto" />
         <allow pkg="io.netty.handler.ssl" />
+        <allow pkg="io.netty.buffer" />
       </subpackage>
       <subpackage name="scram">
         <allow pkg="javax.crypto" />
