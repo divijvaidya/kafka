@@ -91,7 +91,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
             log.info("Tlsv13 is not supported by the native openssl.");
         }
         if (!SslProvider.isAlpnSupported(SslProvider.OPENSSL)) {
-            throw new RuntimeException("Alpn is not supported");
+            log.info("Alpn is not supported");
         }
 
         this.configs = Collections.unmodifiableMap(configs);
@@ -136,7 +136,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
 
             return SslContextBuilder.forServer(kmf)
                 .sslProvider(SslProvider.OPENSSL)
-                .protocols(SslProtocols.TLS_v1_3, SslProtocols.TLS_v1_2)
+                .protocols(SslProtocols.TLS_v1_2)
                 .ciphers(Collections.singletonList("TLS_AES_128_GCM_SHA256"))
                 .trustManager(tmf)
                 .build();

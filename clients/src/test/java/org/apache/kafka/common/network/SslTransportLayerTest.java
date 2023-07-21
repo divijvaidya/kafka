@@ -113,7 +113,6 @@ public class SslTransportLayerTest {
             sslServerConfigs = getTrustingConfig(serverCertStores, clientCertStores);
             sslClientConfigs = getTrustingConfig(clientCertStores, serverCertStores);
             sslServerConfigs.put(SslConfigs.SSL_ENGINE_FACTORY_CLASS_CONFIG, NettySslEngineFactory.class);
-            sslClientConfigs.put(SslConfigs.SSL_ENGINE_FACTORY_CLASS_CONFIG, DefaultSslEngineFactory.class);
         }
 
         @Override
