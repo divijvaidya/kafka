@@ -17,6 +17,7 @@
 package org.apache.kafka.common.security.ssl;
 
 import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.handler.ssl.CipherSuiteFilter;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -137,7 +138,8 @@ public class NettySslEngineFactory implements SslEngineFactory {
             return SslContextBuilder.forServer(kmf)
                 .sslProvider(SslProvider.OPENSSL)
                 .protocols(SslProtocols.TLS_v1_2)
-                .ciphers(Collections.singletonList("TLS_AES_128_GCM_SHA256"))
+                // openssl ciphers -v gives you info on what all suites are supported
+                .ciphers(Collections.singletonList("AES128-GCM-SHA256"))
                 .trustManager(tmf)
                 .build();
         } catch (Exception e) {
