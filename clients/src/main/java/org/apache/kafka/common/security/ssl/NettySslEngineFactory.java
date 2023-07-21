@@ -88,7 +88,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
             throw new RuntimeException("OpenSSL is not supported");
         }
         if (!SslProvider.isTlsv13Supported(OPENSSL)) {
-            throw new RuntimeException("Tlsv13 not supported");
+            log.info("Tlsv13 is not supported by the native openssl.");
         }
         if (!SslProvider.isAlpnSupported(SslProvider.OPENSSL)) {
             throw new RuntimeException("Alpn is not supported");
