@@ -49,9 +49,10 @@ ext {
   gradleVersion = versions.gradle
   minJavaVersion = 8
   buildVersionFileName = "kafka-version.properties"
+  tcNativeBaseDir = file("$buildDir/native-libs")
 
   defaultMaxHeapSize = "2g"
-  defaultJvmArgs = ["-Xss4m", "-XX:+UseParallelGC"]
+  defaultJvmArgs = ["-Xss4m", "-XX:+UseParallelGC", "-Djava.library.path=" + tcNativeBaseDir + "/META-INF/native"]
 
   // "JEP 403: Strongly Encapsulate JDK Internals" causes some tests to fail when they try
   // to access internals (often via mocking libraries). We use `--add-opens` as a workaround
@@ -108,8 +109,6 @@ ext {
   generatedDocsDir = new File("${project.rootDir}/docs/generated")
 
   commitId = determineCommitId()
-
-  tcNativeBaseDir = file("$buildDir/native-libs")
 }
 
 allprojects {
@@ -1418,6 +1417,7 @@ project(':clients') {
 
   task extractTcNativeLibs(type: Copy) {
     dependsOn configurations.tcNative
+    // this is very specific to where tcNative places it's .so directories
     from { configurations.tcNative.collect { zipTree(it) } }
     into tcNativeBaseDir
     duplicatesStrategy 'exclude'
