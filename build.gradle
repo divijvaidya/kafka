@@ -49,10 +49,10 @@ ext {
   gradleVersion = versions.gradle
   minJavaVersion = 8
   buildVersionFileName = "kafka-version.properties"
-  tcNativeBaseDir = file("$buildDir/native-libs")
+  tcNativeBaseDir = file("$buildDir/lib")
 
   defaultMaxHeapSize = "2g"
-  defaultJvmArgs = ["-Xss4m", "-XX:+UseParallelGC", "-Djava.library.path=" + tcNativeBaseDir + "/META-INF/native"]
+  defaultJvmArgs = ["-Xss4m", "-XX:+UseParallelGC", "-Djava.library.path=" + tcNativeBaseDir.absolutePath]
 
   // "JEP 403: Strongly Encapsulate JDK Internals" causes some tests to fail when they try
   // to access internals (often via mocking libraries). We use `--add-opens` as a workaround
@@ -1321,15 +1321,17 @@ project(':clients') {
 
   configurations {
     generator
-    tcNative
+    tcNativeOsx
+    tcNativeLinux
+    tcNativeLinuxFedora
   }
 
   dependencies {
-    implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64", version: "2.0.61.Final")
+    runtimeOnly( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64", version: versions.nettyTcNative)
     //implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-aarch_64", version: "2.0.61.Final")
-    implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-x86_64", version: "2.0.61.Final")
+    runtimeOnly( group: "io.netty", name: "netty-tcnative", classifier: "osx-x86_64", version: versions.nettyTcNative)
     //implementation( group: "io.netty", name: "netty-tcnative", classifier: "osx-aarch_64", version: "2.0.61.Final")
-    implementation( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64-fedora", version: "2.0.61.Final")
+    runtimeOnly( group: "io.netty", name: "netty-tcnative", classifier: "linux-x86_64-fedora", version: versions.nettyTcNative)
     implementation libs.zstd
     implementation libs.lz4
     implementation libs.snappy
@@ -1352,7 +1354,9 @@ project(':clients') {
     testRuntimeOnly libs.jacksonJDK8Datatypes
 
     generator project(':generator')
-    tcNative "io.netty:netty-tcnative:2.0.61.Final:osx-x86_64"
+    tcNativeOsx "io.netty:netty-tcnative:${versions.nettyTcNative}:osx-x86_64"
+    tcNativeLinux "io.netty:netty-tcnative:${versions.nettyTcNative}:linux-x86_64"
+    tcNativeLinuxFedora "io.netty:netty-tcnative:${versions.nettyTcNative}:linux-x86_64-fedora"
   }
 
   task createVersionFile() {
@@ -1415,12 +1419,49 @@ project(':clients') {
     outputs.dir("src/generated-test/java/org/apache/kafka/common/message")
   }
 
-  task extractTcNativeLibs(type: Copy) {
-    dependsOn configurations.tcNative
+  task extractTcNativeLibsLinux(type: Copy) {
+    dependsOn configurations.tcNativeLinux
     // this is very specific to where tcNative places it's .so directories
-    from { configurations.tcNative.collect { zipTree(it) } }
+    from { configurations.tcNativeLinux.collect { zipTree(it).matching {
+      include 'META-INF/native/**/*.so'
+    } } }
     into tcNativeBaseDir
+    eachFile { file ->
+      file.path = file.name
+    }
     duplicatesStrategy 'exclude'
+  }
+
+  task extractTcNativeLibsLinuxFedora(type: Copy) {
+    dependsOn configurations.tcNativeLinuxFedora
+    // this is very specific to where tcNative places it's .so directories
+    from { configurations.tcNativeLinuxFedora.collect { zipTree(it).matching {
+      include 'META-INF/native/**/*.so'
+    } } }
+    into tcNativeBaseDir
+    eachFile { file ->
+      file.path = file.name
+    }
+    duplicatesStrategy 'exclude'
+  }
+
+  task extractTcNativeLibsOsx(type: Copy) {
+    dependsOn configurations.tcNativeOsx
+    // this is very specific to where tcNative places it's .so directories
+    from { configurations.tcNativeOsx.collect { zipTree(it).matching {
+      include 'META-INF/native/**/*.so'
+      include 'META-INF/native/**/*.dynlib'
+      include 'META-INF/native/**/*.jnilib'
+    } } }
+    into tcNativeBaseDir
+    eachFile { file ->
+      file.path = file.name
+    }
+    duplicatesStrategy 'exclude'
+  }
+
+  task extractTcNativeLibs {
+    dependsOn extractTcNativeLibsOsx, extractTcNativeLibsLinuxFedora, extractTcNativeLibsLinux
   }
 
   sourceSets {
