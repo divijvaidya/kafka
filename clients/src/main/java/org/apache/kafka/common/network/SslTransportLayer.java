@@ -38,11 +38,13 @@ import javax.net.ssl.SSLSession;
 
 import org.apache.kafka.common.errors.SslAuthenticationException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.security.ssl.NettySslEngineFactory;
 import org.apache.kafka.common.utils.ByteUtils;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.ByteBufferUnmapper;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /*
  * Transport layer for SSL communication
@@ -123,7 +125,9 @@ public class SslTransportLayer implements TransportLayer {
         state = State.HANDSHAKE;
         //initiate handshake
         sslEngine.beginHandshake();
+        log.debug("Called SSL engine.beginhandshake()");
         handshakeStatus = sslEngine.getHandshakeStatus();
+        log.debug("SSL engine handshake status: " + handshakeStatus);
     }
 
     @Override
@@ -399,6 +403,7 @@ public class SslTransportLayer implements TransportLayer {
                     if (handshakeStatus == HandshakeStatus.NEED_WRAP) {
                         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                     } else if (handshakeStatus == HandshakeStatus.NEED_UNWRAP) {
+                        log.trace("Adding op_write");
                         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
                     }
                     break;
@@ -429,11 +434,13 @@ public class SslTransportLayer implements TransportLayer {
     private HandshakeStatus runDelegatedTasks() {
         for (;;) {
             Runnable task = delegatedTask();
+            System.out.println("running de;egated task");
             if (task == null) {
                 break;
             }
             task.run();
         }
+        System.out.println("exiting delegated task" + sslEngine.getHandshakeStatus());
         return sslEngine.getHandshakeStatus();
     }
 
@@ -490,6 +497,7 @@ public class SslTransportLayer implements TransportLayer {
         handshakeStatus = result.getHandshakeStatus();
         if (result.getStatus() == SSLEngineResult.Status.OK &&
             result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+            log.info("Inside NEED_TASK");
             handshakeStatus = runDelegatedTasks();
         }
 
@@ -505,7 +513,7 @@ public class SslTransportLayer implements TransportLayer {
      * @throws IOException
      */
     private SSLEngineResult handshakeUnwrap(boolean doRead, boolean ignoreHandshakeStatus) throws IOException {
-        log.trace("SSLHandshake handshakeUnwrap {}", channelId);
+        log.debug("SSLHandshake handshakeUnwrap {}", channelId);
         SSLEngineResult result;
         int read = 0;
         if (doRead)

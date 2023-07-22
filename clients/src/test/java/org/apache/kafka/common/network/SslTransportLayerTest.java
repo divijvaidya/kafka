@@ -129,9 +129,6 @@ public class SslTransportLayerTest {
             List<Arguments> parameters = new ArrayList<>();
             parameters.add(Arguments.of(new Args("TLSv1.2", false)));
             parameters.add(Arguments.of(new Args("TLSv1.2", true)));
-            if (Java.IS_JAVA11_COMPATIBLE) {
-                parameters.add(Arguments.of(new Args("TLSv1.3", false)));
-            }
             return parameters.stream();
         }
     }

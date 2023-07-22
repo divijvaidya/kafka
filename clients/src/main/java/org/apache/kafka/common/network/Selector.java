@@ -794,13 +794,13 @@ public class Selector implements Selectable, AutoCloseable {
         if (expiredConnection != null) {
             String connectionId = expiredConnection.getKey();
             KafkaChannel channel = this.channels.get(connectionId);
-            if (channel != null) {
-                if (log.isTraceEnabled())
-                    log.trace("About to close the idle connection from {} due to being idle for {} millis",
-                            connectionId, (currentTimeNanos - expiredConnection.getValue()) / 1000 / 1000);
-                channel.state(ChannelState.EXPIRED);
-                close(channel, CloseMode.GRACEFUL);
-            }
+//            if (channel != null) {
+////                if (log.isTraceEnabled())
+////                    log.trace("About to close the idle connection from {} due to being idle for {} millis",
+////                            connectionId, (currentTimeNanos - expiredConnection.getValue()) / 1000 / 1000);
+////                //channel.state(ChannelState.EXPIRED);
+//                //close(channel, CloseMode.GRACEFUL);
+//            }
         }
     }
 

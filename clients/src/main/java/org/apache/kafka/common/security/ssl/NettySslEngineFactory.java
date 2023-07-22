@@ -24,7 +24,9 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProtocols;
 import io.netty.handler.ssl.SslProvider;
 import org.apache.kafka.common.KafkaException;
+import org.apache.kafka.common.config.SslClientAuth;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.errors.InvalidConfigurationException;
 import org.apache.kafka.common.network.Mode;
@@ -39,7 +41,9 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -51,6 +55,7 @@ import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.spec.InvalidKeySpecException;
@@ -66,6 +71,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static io.netty.handler.ssl.SslProvider.OPENSSL;
 
@@ -79,9 +85,12 @@ public class NettySslEngineFactory implements SslEngineFactory {
     private NettySslEngineFactory.SecurityStore truststore;
     private String kmfAlgorithm;
     private String tmfAlgorithm;
+    private SecureRandom secureRandomImplementation;
 
     public static final String PEM_TYPE = "PEM";
     private SslContext sslContext;
+
+    private SslClientAuth sslClientAuth;
 
     @Override
     public void configure(Map<String, ?> configs) {
@@ -95,7 +104,12 @@ public class NettySslEngineFactory implements SslEngineFactory {
             log.info("Alpn is not supported");
         }
 
+        this.sslClientAuth = createSslClientAuth((String) configs.get(
+            BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG));
+
         this.configs = Collections.unmodifiableMap(configs);
+        this.secureRandomImplementation = createSecureRandom((String)
+            configs.get(SslConfigs.SSL_SECURE_RANDOM_IMPLEMENTATION_CONFIG));
         this.protocol = (String) configs.get(SslConfigs.SSL_PROTOCOL_CONFIG);
         this.provider = (String) configs.get(SslConfigs.SSL_PROVIDER_CONFIG);
         this.kmfAlgorithm = (String) configs.get(SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG);
@@ -113,7 +127,7 @@ public class NettySslEngineFactory implements SslEngineFactory {
             (Password) configs.get(SslConfigs.SSL_TRUSTSTORE_CERTIFICATES_CONFIG));
 
         this.sslContext = createSSLContext(keystore, truststore);
-        log.info("Success - created Ssl context");
+        log.info("Success - created Netty Ssl context");
     }
 
     private SslContext createSSLContext(NettySslEngineFactory.SecurityStore keystore, NettySslEngineFactory.SecurityStore truststore) {
@@ -135,6 +149,9 @@ public class NettySslEngineFactory implements SslEngineFactory {
             KeyStore ts = truststore == null ? null : truststore.get();
             tmf.init(ts);
 
+            log.debug("Created SSL context with keystore {}, truststore {}, provider {}.",
+                keystore, truststore, OPENSSL.name());
+
             return SslContextBuilder.forServer(kmf)
                 .sslProvider(SslProvider.OPENSSL)
                 .protocols(SslProtocols.TLS_v1_2)
@@ -146,6 +163,18 @@ public class NettySslEngineFactory implements SslEngineFactory {
             throw new KafkaException(e);
         }
     }
+
+    private static SecureRandom createSecureRandom(String key) {
+        if (key == null) {
+            return null;
+        }
+        try {
+            return SecureRandom.getInstance(key);
+        } catch (GeneralSecurityException e) {
+            throw new KafkaException(e);
+        }
+    }
+
 
     @Override
     public SSLEngine createClientSslEngine(String peerHost, int peerPort, String endpointIdentification) {
@@ -159,6 +188,20 @@ public class NettySslEngineFactory implements SslEngineFactory {
 
     private SSLEngine createSslEngine(Mode mode, String peerHost, int peerPort) {
         SSLEngine sslEngine = sslContext.newEngine(UnpooledByteBufAllocator.DEFAULT, peerHost, peerPort);
+        if (mode == Mode.SERVER) {
+            switch (sslClientAuth) {
+                case REQUIRED:
+                    sslEngine.setNeedClientAuth(true);
+                    break;
+                case REQUESTED:
+                    sslEngine.setWantClientAuth(true);
+                    break;
+                case NONE:
+                    break;
+            }
+            sslEngine.setUseClientMode(false);
+        }
+
         sslEngine.setUseClientMode(mode == Mode.CLIENT);
         return sslEngine;
     }
@@ -195,6 +238,18 @@ public class NettySslEngineFactory implements SslEngineFactory {
     @Override
     public void close() throws IOException {
         this.sslContext = null;
+    }
+
+    private static SslClientAuth createSslClientAuth(String key) {
+        SslClientAuth auth = SslClientAuth.forConfig(key);
+        if (auth != null) {
+            return auth;
+        }
+        log.warn("Unrecognized client authentication configuration {}.  Falling " +
+                "back to NONE.  Recognized client authentication configurations are {}.",
+            key, String.join(", ", SslClientAuth.VALUES.stream().
+                map(Enum::name).collect(Collectors.toList())));
+        return SslClientAuth.NONE;
     }
 
     protected NettySslEngineFactory.SecurityStore createKeystore(String type, String path, Password password, Password keyPassword, Password privateKey, Password certificateChain) {
