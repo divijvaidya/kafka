@@ -338,84 +338,84 @@ public class SslTransportLayer implements TransportLayer {
         // Throw any pending handshake exception since `netWriteBuffer` has been flushed
         maybeThrowSslAuthenticationException();
 
-        switch (handshakeStatus) {
-            case NEED_TASK:
-                log.trace("SSLHandshake NEED_TASK channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
-                          channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-                handshakeStatus = runDelegatedTasks();
-                break;
-            case NEED_WRAP:
-                log.trace("SSLHandshake NEED_WRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
-                          channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-                handshakeResult = handshakeWrap(write);
-                if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-                    int currentNetWriteBufferSize = netWriteBufferSize();
-                    netWriteBuffer.compact();
-                    netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
-                    netWriteBuffer.flip();
-                    if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
-                        throw new IllegalStateException("Buffer overflow when available data size (" + netWriteBuffer.limit() +
-                                                        ") >= network buffer size (" + currentNetWriteBufferSize + ")");
-                    }
-                } else if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
-                    throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
-                } else if (handshakeResult.getStatus() == Status.CLOSED) {
-                    throw new EOFException();
-                }
-                log.trace("SSLHandshake NEED_WRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
-                       channelId, handshakeResult, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-                //if handshake status is not NEED_UNWRAP or unable to flush netWriteBuffer contents
-                //we will break here otherwise we can do need_unwrap in the same call.
-                if (handshakeStatus != HandshakeStatus.NEED_UNWRAP || !flush(netWriteBuffer)) {
-                    key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-                    break;
-                }
-            case NEED_UNWRAP:
-                log.trace("SSLHandshake NEED_UNWRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
-                          channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-                do {
-                    handshakeResult = handshakeUnwrap(read, false);
+        while(true) {
+            switch (handshakeStatus) {
+                case NEED_TASK:
+                    log.trace("SSLHandshake NEED_TASK channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
+                        channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
+                    handshakeStatus = runDelegatedTasks();
+                    continue;
+                case NEED_WRAP:
+                    log.trace("SSLHandshake NEED_WRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
+                        channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
+                    handshakeResult = handshakeWrap(write);
                     if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-                        int currentAppBufferSize = applicationBufferSize();
-                        appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppBufferSize);
-                        if (appReadBuffer.position() > currentAppBufferSize) {
-                            throw new IllegalStateException("Buffer underflow when available data size (" + appReadBuffer.position() +
-                                                           ") > packet buffer size (" + currentAppBufferSize + ")");
+                        int currentNetWriteBufferSize = netWriteBufferSize();
+                        netWriteBuffer.compact();
+                        netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
+                        netWriteBuffer.flip();
+                        if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
+                            throw new IllegalStateException("Buffer overflow when available data size (" + netWriteBuffer.limit() +
+                                ") >= network buffer size (" + currentNetWriteBufferSize + ")");
                         }
+                    } else if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
+                        throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
+                    } else if (handshakeResult.getStatus() == Status.CLOSED) {
+                        throw new EOFException();
                     }
-                } while (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW);
-                if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
-                    int currentNetReadBufferSize = netReadBufferSize();
-                    netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentNetReadBufferSize);
-                    if (netReadBuffer.position() >= currentNetReadBufferSize) {
-                        throw new IllegalStateException("Buffer underflow when there is available data");
-                    }
-                } else if (handshakeResult.getStatus() == Status.CLOSED) {
-                    throw new EOFException("SSL handshake status CLOSED during handshake UNWRAP");
-                }
-                log.trace("SSLHandshake NEED_UNWRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
-                          channelId, handshakeResult, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-
-                //if handshakeStatus completed than fall-through to finished status.
-                //after handshake is finished there is no data left to read/write in socketChannel.
-                //so the selector won't invoke this channel if we don't go through the handshakeFinished here.
-                if (handshakeStatus != HandshakeStatus.FINISHED) {
-                    if (handshakeStatus == HandshakeStatus.NEED_WRAP) {
+                    handshakeStatus = handshakeResult.getHandshakeStatus();
+                    log.trace("SSLHandshake NEED_WRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
+                        channelId, handshakeResult, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
+                    //if handshake status is not NEED_UNWRAP or unable to flush netWriteBuffer contents
+                    //we will break here otherwise we can do need_unwrap in the same call.
+                    if (handshakeStatus != HandshakeStatus.NEED_UNWRAP || !flush(netWriteBuffer)) {
                         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-                    } else if (handshakeStatus == HandshakeStatus.NEED_UNWRAP) {
-                        log.trace("Adding op_write");
-                        key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+                        break;
+                    } else {
+                        continue;
                     }
+                case NEED_UNWRAP:
+                    log.trace("SSLHandshake NEED_UNWRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
+                        channelId, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
+                    do {
+                        handshakeResult = handshakeUnwrap(read, false);
+                        if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
+                            int currentAppBufferSize = applicationBufferSize();
+                            appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppBufferSize);
+                            if (appReadBuffer.position() > currentAppBufferSize) {
+                                throw new IllegalStateException("Buffer underflow when available data size (" + appReadBuffer.position() +
+                                    ") > packet buffer size (" + currentAppBufferSize + ")");
+                            }
+                        }
+                    } while (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW);
+                    if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
+                        int currentNetReadBufferSize = netReadBufferSize();
+                        netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentNetReadBufferSize);
+                        if (netReadBuffer.position() >= currentNetReadBufferSize) {
+                            throw new IllegalStateException("Buffer underflow when there is available data");
+                        }
+                        break;
+                    } else if (handshakeResult.getStatus() == Status.CLOSED) {
+                        throw new EOFException("SSL handshake status CLOSED during handshake UNWRAP");
+                    }
+                    log.trace("SSLHandshake NEED_UNWRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
+                        channelId, handshakeResult, appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
+
+                    handshakeStatus = handshakeResult.getHandshakeStatus();
+                    //if handshakeStatus completed than fall-through to finished status.
+                    //after handshake is finished there is no data left to read/write in socketChannel.
+                    //so the selector won't invoke this channel if we don't go through the handshakeFinished here.
+                    continue;
+                case FINISHED:
+                    handshakeFinished();
                     break;
-                }
-            case FINISHED:
-                handshakeFinished();
-                break;
-            case NOT_HANDSHAKING:
-                handshakeFinished();
-                break;
-            default:
-                throw new IllegalStateException(String.format("Unexpected status [%s]", handshakeStatus));
+                case NOT_HANDSHAKING:
+                    handshakeFinished();
+                    break;
+                default:
+                    throw new IllegalStateException(String.format("Unexpected status [%s]", handshakeStatus));
+            }
+            break;
         }
     }
 
@@ -434,13 +434,11 @@ public class SslTransportLayer implements TransportLayer {
     private HandshakeStatus runDelegatedTasks() {
         for (;;) {
             Runnable task = delegatedTask();
-            System.out.println("running de;egated task");
             if (task == null) {
                 break;
             }
             task.run();
         }
-        System.out.println("exiting delegated task" + sslEngine.getHandshakeStatus());
         return sslEngine.getHandshakeStatus();
     }
 
@@ -527,7 +525,7 @@ public class SslTransportLayer implements TransportLayer {
             netReadBuffer.compact();
             handshakeStatus = result.getHandshakeStatus();
             if (result.getStatus() == SSLEngineResult.Status.OK &&
-                result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+                handshakeStatus == HandshakeStatus.NEED_TASK) {
                 handshakeStatus = runDelegatedTasks();
             }
             cont = (result.getStatus() == SSLEngineResult.Status.OK &&
