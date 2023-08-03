@@ -25,17 +25,51 @@ import org.apache.kafka.common.message.DeleteRecordsRequestData.{DeleteRecordsPa
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{DeleteRecordsRequest, DeleteRecordsResponse}
 import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.server.log.remote.storage.{NoOpRemoteLogMetadataManager, NoOpRemoteStorageManager, RemoteLogManagerConfig}
 import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue}
+import org.junit.jupiter.api.{BeforeEach, TestInfo}
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 
 import java.util.Collections
 import java.util.concurrent.TimeUnit
-import scala.collection.Seq
 
 class DeleteRecordsRequestTest extends BaseRequestTest {
   private val TIMEOUT_MS = 1000
   private val MESSAGES_PRODUCED_PER_PARTITION = 10
+
+  @BeforeEach
+  override def setUp(testInfo: TestInfo): Unit = {
+    super.setUp(testInfo)
+    if (testInfo.getDisplayName.contains("blah")) {
+      this.serverConfig.setProperty(RemoteLogManagerConfig.REMOTE_LOG_STORAGE_SYSTEM_ENABLE_PROP, "true")
+      this.serverConfig.setProperty(RemoteLogManagerConfig.REMOTE_STORAGE_MANAGER_CLASS_NAME_PROP, classOf[NoOpRemoteStorageManager].getName)
+      this.serverConfig.setProperty(RemoteLogManagerConfig.REMOTE_LOG_METADATA_MANAGER_CLASS_NAME_PROP, classOf[NoOpRemoteLogMetadataManager].getName)
+    }
+  }
+
+  @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
+  @ValueSource(strings = Array("zk", "kraft"))
+  def myblahTest(quorum: String): Unit = {
+    val (topicPartition: TopicPartition, leaderId: Int) = createTopicAndSendRecords
+
+    // Create the DeleteRecord request requesting deletion of offset which is not present
+    val offsetToDelete = MESSAGES_PRODUCED_PER_PARTITION + 5
+    val request: DeleteRecordsRequest = createDeleteRecordsRequestForTopicPartition(topicPartition, offsetToDelete)
+
+    // call the API
+    val response = sendDeleteRecordsRequest(request, leaderId)
+    val partitionResult = response.data.topics.find(topicPartition.topic).partitions.find(topicPartition.partition)
+
+    // Validate the expected error code in the response
+    assertEquals(Errors.NONE.code(), partitionResult.errorCode(),
+      s"Unexpected error code received: ${Errors.forCode(partitionResult.errorCode).name()}")
+
+    // Validate the expected lowWaterMark in the response
+    assertEquals(offsetToDelete, partitionResult.lowWatermark(),
+      s"Unexpected lowWatermark received: ${partitionResult.lowWatermark}")
+
+  }
 
   @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
   @ValueSource(strings = Array("zk", "kraft"))
