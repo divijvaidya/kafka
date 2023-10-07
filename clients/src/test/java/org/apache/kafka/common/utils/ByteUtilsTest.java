@@ -24,7 +24,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
@@ -429,7 +428,7 @@ public class ByteUtilsTest {
         ByteUtils.writeUnsignedVarint(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        InputStream in = new ByteBufferInputStream(buf);
+        DataInputStream in = new DataInputStream(new ByteBufferInputStream(buf));
         assertEquals(value, ByteUtils.readUnsignedVarint(in));
     }
 
@@ -445,7 +444,7 @@ public class ByteUtilsTest {
         ByteUtils.writeVarint(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        InputStream in = new ByteBufferInputStream(buf);
+        DataInputStream in = new DataInputStream(new ByteBufferInputStream(buf));
         assertEquals(value, ByteUtils.readVarint(in));
     }
 
@@ -461,7 +460,7 @@ public class ByteUtilsTest {
         ByteUtils.writeVarlong(value, out);
         buf.flip();
         assertArrayEquals(expectedEncoding, Utils.toArray(buf));
-        InputStream in = new ByteBufferInputStream(buf);
+        DataInputStream in = new DataInputStream(new ByteBufferInputStream(buf));
         assertEquals(value, ByteUtils.readVarlong(in));
     }
 

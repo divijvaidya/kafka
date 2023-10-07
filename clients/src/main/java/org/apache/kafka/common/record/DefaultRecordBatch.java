@@ -26,8 +26,9 @@ import org.apache.kafka.common.utils.ByteUtils;
 import org.apache.kafka.common.utils.CloseableIterator;
 import org.apache.kafka.common.utils.Crc32C;
 
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -132,6 +133,8 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
     private static final int CONTROL_FLAG_MASK = 0x20;
     private static final byte DELETE_HORIZON_FLAG_MASK = 0x40;
     private static final byte TIMESTAMP_TYPE_MASK = 0x08;
+
+    private static final int MAX_SKIP_BUFFER_SIZE = 2048;
 
     private final ByteBuffer buffer;
 
@@ -267,20 +270,23 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return buffer.getInt(PARTITION_LEADER_EPOCH_OFFSET);
     }
 
-    public InputStream recordInputStream(BufferSupplier bufferSupplier) {
+    public DataInputStream recordInputStream(BufferSupplier bufferSupplier) {
         final ByteBuffer buffer = this.buffer.duplicate();
         buffer.position(RECORDS_OFFSET);
-        return compressionType().wrapForInput(buffer, magic(), bufferSupplier);
+        return new DataInputStream(compressionType().wrapForInput(buffer, magic(), bufferSupplier));
     }
 
     private CloseableIterator<Record> compressedIterator(BufferSupplier bufferSupplier, boolean skipKeyValue) {
-        final InputStream inputStream = recordInputStream(bufferSupplier);
+        final DataInputStream inputStream = recordInputStream(bufferSupplier);
 
         if (skipKeyValue) {
+            // this buffer is used to skip length delimited fields like key, value, headers
+            byte[] skipArray = new byte[MAX_SKIP_BUFFER_SIZE];
+
             return new StreamRecordIterator(inputStream) {
                 @Override
                 protected Record doReadRecord(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) throws IOException {
-                    return DefaultRecord.readPartiallyFrom(inputStream, baseOffset, baseTimestamp, baseSequence, logAppendTime);
+                    return DefaultRecord.readPartiallyFrom(inputStream, skipArray, baseOffset, baseTimestamp, baseSequence, logAppendTime);
                 }
             };
         } else {
@@ -563,8 +569,7 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         return sequence - decrement;
     }
 
-    // visible for testing
-    abstract class RecordIterator implements CloseableIterator<Record> {
+    private abstract class RecordIterator implements CloseableIterator<Record> {
         private final Long logAppendTime;
         private final long baseOffset;
         private final long baseTimestamp;
@@ -617,11 +622,10 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
 
     }
 
-    // visible for testing
-    abstract class StreamRecordIterator extends RecordIterator {
-        private final InputStream inputStream;
+    private abstract class StreamRecordIterator extends RecordIterator {
+        private final DataInputStream inputStream;
 
-        StreamRecordIterator(InputStream inputStream) {
+        StreamRecordIterator(DataInputStream inputStream) {
             super();
             this.inputStream = inputStream;
         }
@@ -632,8 +636,8 @@ public class DefaultRecordBatch extends AbstractRecordBatch implements MutableRe
         protected Record readNext(long baseOffset, long baseTimestamp, int baseSequence, Long logAppendTime) {
             try {
                 return doReadRecord(baseOffset, baseTimestamp, baseSequence, logAppendTime);
-            } catch (IllegalArgumentException e) {
-                throw new InvalidRecordException("Incorrect declared batch size, premature EOF reached", e);
+            } catch (EOFException e) {
+                throw new InvalidRecordException("Incorrect declared batch size, premature EOF reached");
             } catch (IOException e) {
                 throw new KafkaException("Failed to decompress record stream", e);
             }
