@@ -46,8 +46,8 @@ public class MirrorRestServer extends RestServer {
 
     @Override
     protected Collection<ConnectResource> regularResources() {
-        return Arrays.asList(
-                new InternalMirrorResource(herders, restClient)
+        return Collections.singletonList(
+            new InternalMirrorResource(herders, restClient)
         );
     }
 

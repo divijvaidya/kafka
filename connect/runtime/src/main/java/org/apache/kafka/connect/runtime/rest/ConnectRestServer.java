@@ -27,6 +27,7 @@ import org.glassfish.jersey.server.ResourceConfig;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
 public class ConnectRestServer extends RestServer {
@@ -56,8 +57,8 @@ public class ConnectRestServer extends RestServer {
 
     @Override
     protected Collection<ConnectResource> adminResources() {
-        return Arrays.asList(
-                new LoggingResource(herder)
+        return Collections.singletonList(
+            new LoggingResource(herder)
         );
     }
 

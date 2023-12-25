@@ -1013,7 +1013,7 @@ class LogManager(logDirs: Seq[File],
             case Some(targetId) if !preferredLogDirs.containsKey(topicPartition) =>
               // If partition is configured with both targetLogDirectoryId and preferredLogDirs, then
               // preferredLogDirs will be respected, otherwise targetLogDirectoryId will be respected
-              directoryIds.find(_._2 == targetId).map(_._1).getOrElse(null)
+              directoryIds.find(_._2 == targetId).map(_._1).orNull
             case _ =>
               preferredLogDirs.get(topicPartition)
           }
