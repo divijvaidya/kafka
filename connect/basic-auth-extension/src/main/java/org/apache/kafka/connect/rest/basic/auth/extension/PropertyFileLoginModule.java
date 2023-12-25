@@ -54,7 +54,7 @@ public class PropertyFileLoginModule implements LoginModule {
     private String fileName;
     private boolean authenticated;
 
-    private static Map<String, Properties> credentialPropertiesMap = new ConcurrentHashMap<>();
+    private static final Map<String, Properties> credentialPropertiesMap = new ConcurrentHashMap<>();
 
     @Override
     public void initialize(Subject subject, CallbackHandler callbackHandler, Map<String, ?> sharedState, Map<String, ?> options) {

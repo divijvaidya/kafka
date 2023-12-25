@@ -119,8 +119,8 @@ public class JaasBasicAuthFilter implements ContainerRequestFilter {
 
     public static class BasicAuthCallBackHandler implements CallbackHandler {
 
-        private String username;
-        private String password;
+        private final String username;
+        private final String password;
 
         public BasicAuthCallBackHandler(BasicAuthCredentials credentials) {
             username = credentials.username();
