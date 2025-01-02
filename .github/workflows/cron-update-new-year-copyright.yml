@@ -60,8 +60,8 @@ jobs:
           git add NOTICE
           git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
           git push origin trunk-copyright-year-${{ steps.get-year.outputs.year }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            github-token: ${{ secrets.GITHUB_TOKEN }}
 
 
       - name: Create pull request
