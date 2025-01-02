@@ -55,6 +55,8 @@ jobs:
 
       - name: Push changes
         run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
           git add NOTICE
           git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
           git push origin trunk-copyright-year-${{ steps.get-year.outputs.year }}
