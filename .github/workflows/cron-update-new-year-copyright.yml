@@ -46,7 +46,7 @@ jobs:
       - name: Switch to trunk branch and create new branch
         run: |
           git checkout trunk
-          git checkout -b ${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}
+          git checkout -b trunk-copyright-year-${{ steps.get-year.outputs.year }}
 
       - name: Update year in NOTICE file
         run: |
@@ -57,7 +57,7 @@ jobs:
         run: |
           git add NOTICE
           git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
-          git push origin ${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}
+          git push origin trunk-copyright-year-${{ steps.get-year.outputs.year }}
 
       - name: Create pull request
         run: |
@@ -69,7 +69,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: "MINOR: Update NOTICE file to year ${{ steps.get-year.outputs.year }}",
-                head:  "${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}",
+                head:  "trunk-copyright-year-${{ steps.get-year.outputs.year }}",
                 base: "trunk",
                 body: `This PR is auto-generated to update the NOTICE file on Jan 1st every year.`
               });
