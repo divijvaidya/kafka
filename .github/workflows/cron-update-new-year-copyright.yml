@@ -37,19 +37,39 @@ jobs:
           persist-credentials:
             false
 
-      - name: Update year in NOTICE file
+      - name: Get the current year
+        id: get-year
         run: |
           CURRENT_YEAR=$(date +%Y)
-          echo "Current year is $CURRENT_YEAR"
           echo "year=$CURRENT_YEAR" >> $GITHUB_OUTPUT
-          sed -i -E "s/(Copyright )([0-9]{4})( The Apache Software Foundation\.)/\1${CURRENT_YEAR}\3/" NOTICE
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update NOTICE file year to ${{ steps.update-year.outputs.year }}"
-          title: "Update NOTICE file year to ${{ steps.update-year.outputs.year }}"
-          body: "This PR updates the NOTICE file to the new year ${{ steps.update-year.outputs.year }}."
-          branch: "update-notice-${{ steps.update-year.outputs.year }}"
-          base: "trunk"
+      - name: Switch to trunk branch and create new branch
+        run: |
+          git checkout trunk
+          git checkout -b ${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}
+
+      - name: Update year in NOTICE file
+        run: |
+          echo "Updating NOTICE file using sed..."
+          sed -i -E "s/(Copyright )([0-9]{4})( The Apache Software Foundation\.)/\1${{ steps.get-year.outputs.year }}\3/" NOTICE
+
+      - name: Push changes
+        run: |
+          git add NOTICE
+          git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
+          git push origin ${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}
+
+      - name: Create pull request
+        run: |
+          uses: actions/github-script@v7
+          with:
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+            script: |
+              let response = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: "MINOR: Update NOTICE file to year ${{ steps.get-year.outputs.year }}",
+                head:  "${{ github.event.client_payload.ReleaseBranchName }}-copyright-year-${{ steps.get-year.outputs.year }}",
+                base: "trunk",
+                body: `This PR is auto-generated to update the NOTICE file on Jan 1st every year.`
+              });
