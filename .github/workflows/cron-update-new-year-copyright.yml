@@ -34,8 +34,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          persist-credentials:
-            false
+          persist-credentials: true
 
       - name: Get the current year
         id: get-year
@@ -60,9 +59,6 @@ jobs:
           git add NOTICE
           git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
           git push origin trunk-copyright-year-${{ steps.get-year.outputs.year }}
-          with:
-            github-token: ${{ secrets.GITHUB_TOKEN }}
-
 
       - name: Create pull request
         run: |
@@ -78,3 +74,4 @@ jobs:
                 base: "trunk",
                 body: `This PR is auto-generated to update the NOTICE file on Jan 1st every year.`
               });
+              core.info(`Pull Request created: #${response.data.number}`);
