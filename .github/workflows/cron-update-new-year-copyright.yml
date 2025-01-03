@@ -75,8 +75,8 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: "MINOR: Update NOTICE file to year ${{ steps.get-year.outputs.year }}",
-              head:  "trunk-copyright-year-${{ steps.get-year.outputs.year }}",
+              head: "trunk-copyright-year-${{ steps.get-year.outputs.year }}",
               base: "trunk",
-              body: `This PR is auto-generated to update the NOTICE file on Jan 1st every year.`
+              body: "This PR is auto-generated to update the NOTICE file on Jan 1st every year."
             });
-            core.info(`Pull Request created: #${response.data.number}`);
+            core.info("Pull Request created: #${response.data.number}");
