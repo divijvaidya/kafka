@@ -68,7 +68,6 @@ jobs:
           git commit \
             -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}" \
             -m "GitHub Run: https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/actions/runs/${{ github.run_id }}"
-          git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
           git push origin "$BRANCH_NAME"
 
       - name: Create pull request
