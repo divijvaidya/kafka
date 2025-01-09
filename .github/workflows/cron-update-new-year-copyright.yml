@@ -45,8 +45,12 @@ jobs:
 
       - name: Switch to trunk branch and create new branch
         run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          BRANCH_NAME="trunk-copyright-year-${{ steps.get-year.outputs.year }}-${TIMESTAMP}"
+    
           git checkout trunk
-          git checkout -b trunk-copyright-year-${{ steps.get-year.outputs.year }}
+          git checkout -b "$BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
       - name: Update year in NOTICE file
         run: |
@@ -55,6 +59,7 @@ jobs:
 
       - name: Push changes
         run: |
+          TIMESTAMP=$(date +%s)    
           # Git user.name and user.email come from https://github.com/actions/checkout?tab=readme-ov-file#push-a-commit-using-the-built-in-token
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -64,7 +69,7 @@ jobs:
             -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}" \
             -m "GitHub Run: https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/actions/runs/${{ github.run_id }}"
           git commit -m "Update NOTICE file to year ${{ steps.get-year.outputs.year }}"
-          git push origin trunk-copyright-year-${{ steps.get-year.outputs.year }}
+          git push origin "$BRANCH_NAME"
 
       - name: Create pull request
         uses: actions/github-script@v7
