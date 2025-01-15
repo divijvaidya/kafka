@@ -23,8 +23,10 @@ import org.junit.jupiter.api.Test;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
@@ -51,19 +53,25 @@ public class ClientUtilsTest {
     }
 
     @Test
-    public void testParseAndValidateAddressesWithReverseLookup() {
+    public void testParseAndValidateAddressesWithReverseLookup() throws UnknownHostException {
         checkWithoutLookup("127.0.0.1:8000");
         checkWithoutLookup("localhost:8080");
         checkWithoutLookup("[::1]:8000");
         checkWithoutLookup("[2001:db8:85a3:8d3:1319:8a2e:370:7348]:1234", "localhost:10000");
 
-        // With lookup of example.com, either one or two addresses are expected depending on
+        // With lookup of example.com, multiples addresses may be present depending on
         // whether ipv4 and ipv6 are enabled
-        List<InetSocketAddress> validatedAddresses = checkWithLookup(Collections.singletonList("example.com:10000"));
+        final String testDomain = "example.com";
+        List<InetSocketAddress> validatedAddresses = checkWithLookup(Collections.singletonList(testDomain + ":10000"));
         assertFalse(validatedAddresses.isEmpty(), "Unexpected addresses " + validatedAddresses);
         List<String> validatedHostNames = validatedAddresses.stream().map(InetSocketAddress::getHostName)
                 .collect(Collectors.toList());
-        List<String> expectedHostNames = asList("93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c");
+
+        // Set up expected result using Java's DNS lookup
+        InetAddress[] inetAddresses = InetAddress.getAllByName(testDomain);
+        Set<String> expectedHostNames = Arrays.stream(inetAddresses)
+                .map(InetAddress::getCanonicalHostName)
+                .collect(Collectors.toSet());
         assertTrue(expectedHostNames.containsAll(validatedHostNames), "Unexpected addresses " + validatedHostNames);
         validatedAddresses.forEach(address -> assertEquals(10000, address.getPort()));
     }
